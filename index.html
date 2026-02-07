@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <title>v1</title>
+    <meta charset="UTF-8">
+    <style>
+        :root { --ps-width: 80px; --log-height: 200px; }
+        * { box-sizing: border-box; }
+        body { margin: 0; padding: 0; background-color: #131722; font-family: 'Segoe UI', sans-serif; overflow: hidden; display: flex; flex-direction: column; height: 100vh; }
+        #topbar { height: 45px; background: #1e222d; border-bottom: 1px solid #363c4e; display: flex; align-items: center; padding: 0 20px; color: #d1d4dc; flex-shrink: 0; z-index: 2000; }
+        .menu-item { position: relative; height: 100%; display: flex; align-items: center; margin-right: 10px; }
+        .dropdown { display: none; position: absolute; top: 45px; left: 0; background: #1e222d; border: 1px solid #363c4e; border-radius: 0 0 4px 4px; padding: 12px; z-index: 2001; min-width: 160px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
+        .menu-item:hover .dropdown { display: block; }
+        .ind-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; cursor: pointer; font-size: 11px; color: #d1d4dc; }
+        .ind-row:hover { color: #2196f3; }
+        .nav-btn { background: #363c4e; border: none; color: #d1d4dc; padding: 6px 12px; cursor: pointer; border-radius: 4px; font-size: 11px; font-weight: bold; margin-right: 8px; }
+        .nav-btn:hover { background: #4c5265; }
+        #panels-container { flex: 1 1 auto; display: flex; flex-direction: column; overflow: hidden; background: #131722; position: relative; }
+        .pane-wrapper { position: relative; width: 100%; border-bottom: 1px solid #363c4e; display: flex; flex-direction: column; }
+        #main-pane { flex: 1 1 auto; min-height: 100px; }
+        .sub-pane { height: 130px; flex-shrink: 0; }
+        .chart-container { width: 100%; height: 100%; flex: 1; }
+        #popbar { position: absolute; top: 15px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; z-index: 2000; pointer-events: none; }
+        .info-box { background: rgba(25, 27, 34, 0.6); border: 1px solid #363c4e; border-radius: 4px; padding: 4px 10px; min-width: 75px; display: flex; flex-direction: column; align-items: center; }
+        .info-label { font-size: 9px; color: #787b86; text-transform: uppercase; }
+        .info-value { font-size: 13px; font-weight: bold; color: #d1d4dc; }
+        .v-line { position: absolute; top: 0; bottom: 0; left: calc(50% - (var(--ps-width) / 2)); border-left: 1px dashed rgba(41, 98, 255, 0.6); z-index: 1500; pointer-events: none; }
+        #log-panel { height: var(--log-height); background: #131722; border-top: 2px solid #363c4e; display: flex; flex-direction: column; flex-shrink: 0; }
+        #log-panel.collapsed { height: 30px; }
+        #log-header { height: 30px; background: #1e222d; display: flex; align-items: center; padding: 0 15px; font-size: 11px; font-weight: bold; color: #d1d4dc; justify-content: space-between; cursor: pointer; }
+        #log-content { flex: 1; overflow-y: auto; padding: 10px; font-family: 'Consolas', monospace; font-size: 11px; color: #b2b5be; line-height: 1.4; }
+    </style>
+</head>
+<body>
+    <div id="topbar">
+        <div class="menu-item">
+            <button id="range-btn" class="nav-btn">1D ▾</button>
+            <div class="dropdown">
+                <div class="ind-row" onclick="setRange('1D')">1D</div>
+                <div class="ind-row" onclick="setRange('1W')">1W</div>
+                <div class="ind-row" onclick="setRange('1M')">1M</div>
+                <div class="ind-row" onclick="setRange('1Y')">1Y</div>
+            </div>
+        </div>
+        <div class="menu-item">
+            <button id="source-btn" class="nav-btn" style="color: #2196f3;">SOURCE ▾</button>
+            <div class="dropdown">
+                <div class="ind-row" onclick="setDataSource('none')">● None (Clear)</div>
+                <div class="ind-row" onclick="setDataSource('synt')">● Synthetic Data</div>
+                <div class="ind-row" onclick="setDataSource('csv')">● Local CSV Folder</div>
+            </div>
+        </div>
+        <div class="menu-item">
+            <button id="pair-btn" class="nav-btn">PAIR ▾</button>
+            <div id="pair-dropdown" class="dropdown"></div>
+        </div>
+        <div id="indicator-menu" class="menu-item">
+            <button class="nav-btn">INDICATORS ▾</button>
+            <div class="dropdown" onclick="event.stopPropagation()">
+                <label class="ind-row"><input type="checkbox" data-id="SMA" onchange="toggleIndicator('SMA', this.checked)"> SMA 20</label>
+                <label class="ind-row"><input type="checkbox" data-id="BB" onchange="toggleIndicator('BB', this.checked)"> Bollinger Bands</label>
+                <hr style="border:0; border-top:1px solid #363c4e; margin: 10px 0;">
+                <label class="ind-row"><input type="checkbox" data-id="MACD" onchange="toggleIndicator('MACD', this.checked)"> MACD</label>
+                <label class="ind-row"><input type="checkbox" data-id="RSI" onchange="toggleIndicator('RSI', this.checked)"> RSI</label>
+            </div>
+        </div>
+        <button class="nav-btn" onclick="changeMarker(-1)">&lt; PREV</button>
+        <button class="nav-btn" onclick="changeMarker(1)">NEXT &gt;</button>
+        <div style="flex-grow: 1;"></div>
+        <button class="nav-btn" onclick="toggleLog()">LOG</button>
+    </div>
+
+    <div id="panels-container">
+        <div id="main-pane" class="pane-wrapper">
+            <div id="popbar">
+                <div class="info-box"><span class="info-label">O</span><span id="val-open" class="info-value">-</span></div>
+                <div class="info-box"><span class="info-label">H</span><span id="val-high" class="info-value">-</span></div>
+                <div class="info-box"><span class="info-label">L</span><span id="val-low" class="info-value">-</span></div>
+                <div class="info-box"><span class="info-label">C</span><span id="val-close" class="info-value">-</span></div>
+            </div>
+            <div class="v-line"></div>
+            <div id="chart-main" class="chart-container"></div>
+        </div>
+    </div>
+
+    <div id="log-panel">
+        <div id="log-header" onclick="toggleLog()"><span>TERMINAL ENGINE v5.1</span><span style="color:#26a69a">ONLINE</span></div>
+        <div id="log-content"></div>
+    </div>
+
+    <script src="./lightweight-charts.standalone.production.js"></script>
+    <script src="./provider-synt.js"></script>
+    <script src="./provider-csv.js"></script>
+
+<script>
+    const SCALE_WIDTH = 80;
+    let data = [];
+    let MARKER_TIMESTAMPS = [];
+    let currentRange = '1D', currentSource = 'none', curM = 0, isSyncing = false;
+    const activePanes = {}, mainSeriesRefs = {};
+
+    const addLog = (m) => { 
+        const c = document.getElementById('log-content'); 
+        if (c) { 
+            c.innerHTML += `<div><span style="color:#5d606b">[${new Date().toLocaleTimeString()}]</span> ${m}</div>`; 
+            c.scrollTop = c.scrollHeight; 
+        } 
+    };
+
+	//НЕ МЕНЯТЬ!!!
+    const chartOpts = { 
+        layout: { background: { color: '#131722' }, textColor: '#d1d4dc' }, 
+        rightPriceScale: { borderColor: '#363c4e', minimumWidth: SCALE_WIDTH }, 
+        grid: { vertLines: { visible: false }, horzLines: { color: '#242733' } }, 
+        crosshair: { mode: LightweightCharts.CrosshairMode.Hidden },
+        timeScale: { borderColor: '#363c4e', timeVisible: true, rightOffset: 80 } 
+    };
+
+    const chartMain = LightweightCharts.createChart(document.getElementById('chart-main'), chartOpts);
+    const candleSeries = chartMain.addSeries(LightweightCharts.CandlestickSeries, { 
+        upColor: '#26a69a', downColor: '#ef5350', lastValueVisible: false, priceLineVisible: false 
+    });
+
+    window.onresize = () => { 
+        const container = document.getElementById('main-pane');
+        if (!container) return;
+        chartMain.resize(container.clientWidth, container.clientHeight); 
+        Object.values(activePanes).forEach(p => p.chart.resize(container.clientWidth, 130)); 
+    };
+
+    window.toggleLog = () => { 
+        document.getElementById('log-panel').classList.toggle('collapsed'); 
+        setTimeout(window.onresize, 50); 
+    };
+
+    window.setRange = (r) => { 
+        currentRange = r; 
+        document.getElementById('range-btn').innerText = r + ' ▾'; 
+        addLog(`Range set to: ${r}`); 
+    };
+
+    function renderPairs(pairs) {
+        const drop = document.getElementById('pair-dropdown');
+        if (!drop) return;
+        drop.innerHTML = pairs.length ? '' : '<div class="ind-row">No pairs found</div>';
+        pairs.forEach(p => { 
+            const el = document.createElement('div'); 
+            el.className = 'ind-row'; 
+            el.innerText = p; 
+            el.onclick = () => window.setPair(p); 
+            drop.appendChild(el); 
+        });
+    }
+
+    // Вспомогательные функции расчетов
+    const calcEMA = (arr, p) => {
+        if (!arr || !arr.length) return [];
+        const k = 2 / (p + 1);
+        let ema = [];
+        let prev = (arr[0].close !== undefined) ? arr[0].close : arr[0].value;
+        arr.forEach((d, i) => {
+            let val = (d.close !== undefined) ? d.close : d.value;
+            let v = (i === 0) ? prev : (val - prev) * k + prev;
+            ema.push({ time: d.time, value: v });
+            prev = v;
+        });
+        return ema;
+    };
+
+    const calcRSI = (data, p) => {
+        if (data.length <= p) return [];
+        let rsiData = [], avgGain = 0, avgLoss = 0;
+        for (let i = 1; i <= p; i++) {
+            const diff = data[i].close - data[i-1].close;
+            if (diff > 0) avgGain += diff; else avgLoss -= diff;
+        }
+        avgGain /= p; avgLoss /= p;
+        let rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
+        rsiData.push({ time: data[p].time, value: 100 - (100 / (1 + rs)) });
+
+        for (let i = p + 1; i < data.length; i++) {
+            const diff = data[i].close - data[i-1].close;
+            let gain = diff > 0 ? diff : 0, loss = diff < 0 ? -diff : 0;
+            avgGain = (avgGain * (p - 1) + gain) / p;
+            avgLoss = (avgLoss * (p - 1) + loss) / p;
+            rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
+            rsiData.push({ time: data[i].time, value: 100 - (100 / (1 + rs)) });
+        }
+        return rsiData;
+    };
+
+    window.setDataSource = async (type) => {
+        currentSource = type; 
+        document.getElementById('source-btn').innerText = (type === 'none' ? 'SOURCE' : type.toUpperCase()) + ' ▾';
+        if (type === 'none') {
+            data = []; candleSeries.setData([]);
+            Object.keys(mainSeriesRefs).forEach(id => { mainSeriesRefs[id].forEach(s => chartMain.removeSeries(s)); delete mainSeriesRefs[id]; });
+            Object.keys(activePanes).forEach(id => { activePanes[id].chart.remove(); document.getElementById(`wrapper-${id}`)?.remove(); delete activePanes[id]; });
+            document.querySelectorAll('#indicator-menu input[type="checkbox"]').forEach(cb => cb.checked = false);
+            addLog("Source cleared.");
+        } else if (type === 'csv' && window.CsvProvider) {
+            if (await window.CsvProvider.requestAccess()) renderPairs(await window.CsvProvider.scanFiles());
+        } else if (type === 'synt') {
+            renderPairs(window.SyntProvider?.getPairs() || []);
+        }
+        window.onresize(); 
+    };
+
+    window.setPair = async (p) => { 
+        document.getElementById('pair-btn').innerText = p + ' ▾'; 
+        const provider = (currentSource === 'synt') ? window.SyntProvider : window.CsvProvider;
+        if (provider) {
+            const newData = await provider.fetchData(currentRange, p);
+            if (!newData || !newData.length) return addLog("No data received");
+            data = newData;
+            candleSeries.setData(data);
+            chartMain.timeScale().fitContent();
+            document.querySelectorAll('#indicator-menu input[type="checkbox"]').forEach(cb => { 
+                if(cb.checked) window.toggleIndicator(cb.getAttribute('data-id'), true); 
+            });
+            updatePopbar();
+            addLog(`Loaded ${p}: ${data.length} candles`);
+        }
+    };
+
+    function updatePopbar() {
+        if (!data.length) return;
+        const ts = chartMain.timeScale();
+        const mainPane = document.getElementById('main-pane');
+        const logicalIndex = ts.coordinateToLogical((mainPane.clientWidth - SCALE_WIDTH) / 2);
+        if (logicalIndex !== null) {
+            const candle = data[Math.round(logicalIndex)];
+            if (candle) {
+                ['open', 'high', 'low', 'close'].forEach(f => { 
+                    const el = document.getElementById(`val-${f}`);
+                    if (el) el.innerText = candle[f].toFixed(5); 
+                });
+            }
+        }
+    }
+
+    function syncAll(source) {
+        if (isSyncing) return; 
+        isSyncing = true;
+        const range = source.timeScale().getVisibleLogicalRange();
+        if (range) {
+            [chartMain, ...Object.values(activePanes).map(p => p.chart)].forEach(c => { 
+                if (c && c !== source) c.timeScale().setVisibleLogicalRange(range); 
+            });
+        }
+        updatePopbar(); 
+        isSyncing = false;
+    }
+
+    chartMain.timeScale().subscribeVisibleLogicalRangeChange(() => syncAll(chartMain));
+
+    window.toggleIndicator = function(id, isChecked) {
+        if (!isChecked) {
+            if (mainSeriesRefs[id]) { mainSeriesRefs[id].forEach(s => chartMain.removeSeries(s)); delete mainSeriesRefs[id]; }
+            if (activePanes[id]) { activePanes[id].chart.remove(); document.getElementById(`wrapper-${id}`)?.remove(); delete activePanes[id]; }
+            return window.onresize();
+        }
+        if (!data.length) return;
+
+        if (id === 'SMA' || id === 'BB') {
+            if (mainSeriesRefs[id]) mainSeriesRefs[id].forEach(s => chartMain.removeSeries(s));
+            mainSeriesRefs[id] = [];
+            if (id === 'SMA') {
+                const s = chartMain.addSeries(LightweightCharts.LineSeries, { color: '#ff00a6', lineWidth: 1, lastValueVisible: false, priceLineVisible: false });
+                const sma = data.map((d, i) => i < 19 ? null : { time: d.time, value: data.slice(i-19, i+1).reduce((a,b)=>a+b.close, 0)/20 }).filter(v => v !== null);
+                s.setData(sma); mainSeriesRefs[id].push(s);
+            }
+            if (id === 'BB') {
+                const bb = data.map((d, i) => { 
+                    if (i < 19) return null; 
+                    const sl = data.slice(i-19, i+1).map(x=>x.close), m = sl.reduce((a,b)=>a+b,0)/20, sd = Math.sqrt(sl.reduce((a,b)=>a+Math.pow(b-m,2),0)/20);
+                    return { time: d.time, t: m + 2*sd, m: m, b: m - 2*sd };
+                }).filter(v => v !== null);
+                [{k:'t', c:'rgba(38,166,154,0.3)'}, {k:'m', c:'rgba(33,150,243,0.5)'}, {k:'b', c:'rgba(38,166,154,0.3)'}].forEach(o => {
+                    const s = chartMain.addSeries(LightweightCharts.LineSeries, { color: o.c, lineWidth: 1, lastValueVisible: false, priceLineVisible: false });
+                    s.setData(bb.map(v => ({ time: v.time, value: v[o.k] }))); mainSeriesRefs[id].push(s);
+                });
+            }
+        } else {
+            if (!activePanes[id]) {
+                const wr = document.createElement('div'); wr.id = `wrapper-${id}`; wr.className = 'pane-wrapper sub-pane'; wr.innerHTML = `<div class="v-line"></div><div id="chart-${id}" class="chart-container"></div>`;
+                document.getElementById('panels-container').appendChild(wr);
+                const c = LightweightCharts.createChart(document.getElementById(`chart-${id}`), { ...chartOpts, timeScale: { visible: false } });
+                c.timeScale().subscribeVisibleLogicalRangeChange(() => syncAll(c));
+                activePanes[id] = { chart: c, series: [] };
+            }
+            const pane = activePanes[id];
+            pane.series.forEach(s => pane.chart.removeSeries(s)); pane.series = [];
+            if (id === 'RSI') {
+                const s = pane.chart.addSeries(LightweightCharts.LineSeries, { color: '#ff00a6', lineWidth: 1, lastValueVisible: false, priceLineVisible: false });
+                s.setData(calcRSI(data, 14)); pane.series.push(s);
+            }
+            if (id === 'MACD') {
+                const h = pane.chart.addSeries(LightweightCharts.HistogramSeries, { lastValueVisible: false, priceLineVisible: false });
+                const l1 = pane.chart.addSeries(LightweightCharts.LineSeries, { color: '#2196f3', lineWidth: 1, lastValueVisible: false, priceLineVisible: false });
+                const l2 = pane.chart.addSeries(LightweightCharts.LineSeries, { color: '#ff9800', lineWidth: 1, lastValueVisible: false, priceLineVisible: false });
+                const e12 = calcEMA(data, 12), e26 = calcEMA(data, 26);
+                const m = e12.map((e,i)=>({time: e.time, value: e.value - e26[i].value}));
+                const sig = calcEMA(m, 9);
+                h.setData(m.map((v,i)=>({time: v.time, value: v.value - (sig[i]?.value || 0), color: (v.value-(sig[i]?.value||0))>=0?'#26a69a':'#ef5350'})));
+                l1.setData(m); l2.setData(sig); pane.series.push(h, l1, l2);
+            }
+            window.onresize(); syncAll(chartMain);
+        }
+    };
+
+    window.changeMarker = (dir) => { 
+        if (MARKER_TIMESTAMPS.length) { 
+            curM = (curM + dir + MARKER_TIMESTAMPS.length) % MARKER_TIMESTAMPS.length; 
+            const ts = MARKER_TIMESTAMPS[curM];
+            chartMain.timeScale().setVisibleRange({ from: ts - 3600, to: ts + 3600 }); 
+        } 
+    };
+
+    window.onresize(); 
+    window.setDataSource('none');
+</script>
+</body>
+</html>
