@@ -104,7 +104,8 @@ function updatePopbar() {
     const logicalIndex = ts.coordinateToLogical((mainPane.clientWidth - SCALE_WIDTH) / 2);
     if (logicalIndex !== null) {
         const candle = data[Math.round(logicalIndex)];
-        if (c            ['open', 'high', 'low', 'close'].forEach(f => { 
+        if (candle) {
+            ['open', 'high', 'low', 'close'].forEach(f => { 
                 const el = document.getElementById(`val-${f}`);
                 if (el) el.innerText = candle[f].toFixed(5); 
             });
@@ -170,7 +171,7 @@ window.toggleIndicator = function(id, isChecked) {
         if (id === 'MACD') {
             const h = pane.chart.addSeries(LightweightCharts.HistogramSeries, { lastValueVisible: false, priceLineVisible: false });
             const l1 = pane.chart.addSeries(LightweightCharts.LineSeries, { color: '#2196f3', lineWidth: 1, lastValueVisible: false, priceLineVisible: false });
-            const l2 = pane.chart.addSeries(LightweightCharts.LineSeries, { color: '#ff9800', lineWidth: 1, lastValueVisible: false, priceLineVisible: false });
+            const l2 = pane.chart.addSeries(LightweightCharts.LineSeries, { color: '#ff9800', lineWidth:1, lastValueVisible: false, priceLineVisible: false });
             const e12 = calcEMA(data, 12), e26 = calcEMA(data, 26);
             const m = e12.map((e,i)=>({time: e.time, value: e.value - e26[i].value}));
             const sig = calcEMA(m, 9);
