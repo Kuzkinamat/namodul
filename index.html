@@ -25,7 +25,7 @@
         .info-label { font-size: 9px; color: #787b86; text-transform: uppercase; }
         .info-value { font-size: 13px; font-weight: bold; color: #d1d4dc; }
         .v-line { position: absolute; top: 0; bottom: 0; left: calc(50% - (var(--ps-width) / 2)); border-left: 1px dashed rgba(41, 98, 255, 0.6); z-index: 1500; pointer-events: none; }
-        #log-panel { height: var(--log-height); background: #131722; border-top: 2px solid #363c4e; display: flex; flex-direction: column; flex-shrink: 0; }
+        #log-panel { height: var(--log); background #131722; border-top: 2px solid #363c4e; display: flex; flex-direction: column; flex-shrink: 0; }
         #log-panel.collapsed { height: 30px; }
         #log-header { height: 30px; background: #1e222d; display: flex; align-items: center; padding: 0 15px; font-size: 11px; font-weight: bold; color: #d1d4dc; justify-content: space-between; cursor: pointer; }
         #log-content { flex: 1; overflow-y: auto; padding: 10px; font-family: 'Consolas', monospace; font-size: 11px; color: #b2b5be; line-height: 1.4; }
@@ -49,6 +49,7 @@
                 <div class="ind-row" onclick="setDataSource('synt')">● Synthetic Data</div>
                 <div class="ind-row" onclick="setDataSource('csv')">● Local CSV Folder</div>
                 <div class="ind-row" onclick="setDataSource('massive')">● Massive API</div>
+                <div class="ind-row" onclick="setDataSource('forex')">● Forex Data</div>
             </div>
         </div>
         <div class="menu-item">
@@ -93,6 +94,7 @@
     <script src="./provider-synt.js"></script>
     <script src="./provider-csv.js"></script>
     <script src="./provider-massive.js"></script>
+    <script src="./provider-forex.js"></script>
     <script src="./calc.js"></script>
     <script src="./ind.js"></script>
     <script src="./main.js"></script>
