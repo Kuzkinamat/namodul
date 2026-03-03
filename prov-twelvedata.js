@@ -58,7 +58,7 @@ window.TwelveDataProvider = {
                     this.useMockData = true;
                     return true;
                 } else {
-                    addLog(`⚠ API response: ${data.message || 'Unexpected response'}, using mock data`);
+                    addLog(`⚠ API: ${data.message || 'Unexpected response'}, using mock data`);
                     this.useMockData = true;
                     return true;
                 }
@@ -214,7 +214,7 @@ window.TwelveDataProvider = {
             if (base === 'GBP') basePrice = 1.26;
             if (base === 'USD') {
                 const quote = pair.split('/')[1];
-                if (quote 'JPY') basePrice = 150.5;
+                if (quote === 'JPY') basePrice = 150.5;
                 if (quote === 'CHF') basePrice = 0.88;
                 if (quote === 'CAD') basePrice = 1.36;
             }
