@@ -2,8 +2,8 @@
 
 const SCALE_WIDTH = 80;
 let data = [];
-let MARKER_TIMESTAMPS = [];
-let currentRange = '1M', currentTimeframe = '1min', currentSource = 'none', curM = 0, isSyncing = false;
+let MARKER_TIMESTAMPS [];
+let current '1M', currentTimeframe = '1min', currentSource = 'none', curM = 0, isSyncing = false;
 const activePanes = {}, mainSeriesRefs = {};
 
 const addLog = (m) => { 
@@ -118,7 +118,7 @@ function updatePopbar() {
     if (logicalIndex !== null) {
         const candle = data[Math.round(logicalIndex)];
         if (candle) {
-            ['', 'high', 'lowclose'].forEach(f => { 
+            ['open', 'high', 'low', 'close'].forEach(f => { 
                 const el = document.getElementById(`val-${f}`);
                 if (el) el.innerText = candle[f].toFixed(5); 
             });
