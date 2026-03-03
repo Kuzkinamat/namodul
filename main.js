@@ -3,7 +3,7 @@
 const SCALE_WIDTH = 80;
 let data = [];
 let MARKER_TIMESTAMPS = [];
-let currentRange = '1D', currentSource = 'none', curM = 0, isSyncing = false;
+let currentRange = '1M', currentTimeframe = '1min', currentSource = 'none', curM = 0, isSyncing = false;
 const activePanes = {}, mainSeriesRefs = {};
 
 const addLog = (m) => { 
@@ -46,6 +46,12 @@ window.setRange = (r) => {
     addLog(`Range set to: ${r}`); 
 };
 
+window.setTimeframe = (tf) => { 
+    currentTimeframe = tf; 
+    document.getElementById('timeframe-btn').innerText = tf + ' ▾'; 
+    addLog(`Timeframe set to: ${tf}`); 
+};
+
 function renderPairs(pairs) {
     const drop = document.getElementById('pair-dropdown');
     if (!drop) return;
@@ -84,7 +90,14 @@ window.setPair = async (p) => {
     const provider = (currentSource === 'csv') ? window.CsvProvider :
                      (currentSource === 'twelvedata') ? window.TwelveDataProvider : null;
     if (provider) {
-        const newData = await provider.fetchData(currentRange, p);
+        // Combine range and timeframe for data fetching
+        const combinedRange = currentTimeframe === '1min' ? '1min' :
+                             currentTimeframe === '5min' ? '5min' :
+                             currentTimeframe === '15min' ? '15min' :
+                             currentRange;
+        
+        addLog(`Fetching data: ${p}, Range: ${currentRange}, Timeframe: ${currentTimeframe}`);
+        const newData = await provider.fetchData(combinedRange, p);
         if (!newData || !newData.length) return addLog("No data received");
         data = newData;
         candleSeries.setData(data);
@@ -93,7 +106,7 @@ window.setPair = async (p) => {
             if(cb.checked) window.toggleIndicator(cb.getAttribute('data-id'), true); 
         });
         updatePopbar();
-        addLog(`Loaded ${p}: ${data.length} candles`);
+        addLog(`Loaded ${p}: ${data.length} candles (Range: ${currentRange}, TF: ${currentTimeframe})`);
     }
 };
 
@@ -105,7 +118,7 @@ function updatePopbar() {
     if (logicalIndex !== null) {
         const candle = data[Math.round(logicalIndex)];
         if (candle) {
-            ['open', 'high', 'low', 'close'].forEach(f => { 
+            ['', 'high', 'lowclose'].forEach(f => { 
                 const el = document.getElementById(`val-${f}`);
                 if (el) el.innerText = candle[f].toFixed(5); 
             });
@@ -190,5 +203,6 @@ window.changeMarker = (dir) => {
     } 
 };
 
+// Initialize with default values
 window.onresize(); 
 window.setDataSource('none');
