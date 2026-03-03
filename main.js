@@ -20,7 +20,7 @@ const chartOpts = {
     rightPriceScale: { borderColor: '#363c4e', minimumWidth: SCALE_WIDTH }, 
     grid: { vertLines: { visible: false }, horzLines: { color: '#242733' } }, 
     crosshair: { mode: LightweightCharts.CrosshairMode.Hidden },
-    timeScale: { borderColor: '#363c4e', timeVisible: true, rightOffset: 80 } 
+    timeScale: { borderColor: '#363c4e timeVisible: true, rightOffset:  
 };
 
 const chartMain = LightweightCharts.createChart(document.getElementById('chart-main'), chartOpts);
@@ -126,7 +126,8 @@ function updatePopbar() {
     }
 }
 
-function syncAll(source)iscing) return; 
+function syncAll(source) {
+    if (isSyncing) return; 
     isSyncing = true;
     const range = source.timeScale().getVisibleLogicalRange();
     if (range) {
