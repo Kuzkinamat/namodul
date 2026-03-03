@@ -27,7 +27,7 @@
         .v-line { position: absolute; top: 0; bottom: 0; left: calc(50% - (var(--ps-width) / 2)); border-left: 1px dashed rgba(41, 98, 255, 0.6); z-index: 1500; pointer-events: none; }
         #log-panel { height: var(--log-height); background: #131722; border-top: 2px solid #363c4e; display: flex; flex-direction: column; flex-shrink: 0; }
         #log-panel.collapsed { height: 30px; }
-        #log-header { height: 30px; background: #1e222d; display: flex; align-items: center; padding: 0 15px; font-size: 11px; font-weight: bold; color: #d1d4dc; justify-content: space-between; cursor: pointer; }
+        #log-header { height: 30px; background: #1e222d; display: flex; align-items: center; padding: 0 15px; font-size: 11px; font-weight: bold;: #d1ddc; justify-content: space-between; cursor: pointer; }
         #log-content { flex: 1; overflow-y: auto; padding: 10px; font-family: 'Consolas', monospace; font-size: 11px; color: #b2b5be; line-height: 1.4; }
     </style>
 </head>
@@ -38,8 +38,8 @@
             <div class="dropdown">
                 <div class="ind-row" onclick="setRange('1min')">1min</div>
                 <div class="ind-row" onclick="setRange('5min')">5min</div>
-                <div class="ind-row" onclick="setRange('15min')15</div>
-               ="ind-row" onclick="setRange('1D')">1D</div>
+                <div class="ind-row" onclick="setRange('15min')">15min</div>
+                <div class="ind-row" onclick="setRange('1D')">1D</div>
                 <div class="ind-row" onclick="setRange('1W')">1W</div>
                 <div class="ind-row" onclick="setRange('1M')">1M</div>
                 <div class="ind-row" onclick="setRange('1Y')">1Y</div>
@@ -49,7 +49,6 @@
             <button id="source-btn" class="nav-btn" style="color: #2196f3;">SOURCE ▾</button>
             <div class="dropdown">
                 <div class="ind-row" onclick="setDataSource('none')">● None (Clear)</div>
-                <div class="ind-row" onclick="setDataSource('synt')">● Synthetic Data</div>
                 <div class="ind-row" onclick="setDataSource('csv')">● Local CSV Folder</div>
                 <div class="ind-row" onclick="setDataSource('twelvedata')">● Twelve Data API</div>
             </div>
@@ -93,7 +92,6 @@
     </div>
 
     <script src="./lightweight-charts.standalone.production.js"></script>
-    <script src="./provider-synt.js"></script>
     <script src="./provider-csv.js"></script>
     <script src="./prov-twelvedata.js"></script>
     <script src="./calc.js"></script>
