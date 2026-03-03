@@ -5,7 +5,7 @@ const MASSIVE_API_KEY = '5EiWzpPBCXUye50zN988CNLq6Z3J5CJk';
 const MASSIVE_API_URL = 'https://api.massive.com';
 
 // Mock pairs for demo (will be updated with real API pairs)
-const MOCK_PAIRS = ['BTCUSD', 'ETHUSD', 'AAPL', 'GOOGL', 'MSFT'];
+const MOCK_PAIRS = ['BTCUSD', 'ETHUSD', '', 'GOOGL', 'MSFT'];
 
 window.MassiveProvider = {
     apiKey: MASSIVE_API_KEY,
@@ -19,9 +19,14 @@ window.MassiveProvider = {
         try {
             addLog("Connecting to Massive API...");
             // Test API connection
-            const response = await fetch(`${this.baseUrl}/v1/markets`, {
+            const testUrl = `${this.baseUrl}/v1/markets`;
+            addLog(`Testing URL: ${testUrl}`);
+            
+            const response = await fetch(testUrl, {
                 headers: { 'Authorization': `Bearer ${this.apiKey}` }
             });
+            
+            addLog(`Response status: ${response.status} ${response.statusText}`);
             
             if (response.ok) {
                 const data = await response.json();
@@ -31,7 +36,15 @@ window.MassiveProvider = {
                 addLog(`✓ Massive API connected. Found ${this.pairs.length} pairs`);
                 return true;
             } else {
-                addLog(`✗ API Error: ${response.status}`);
+                // Try to get error details
+                let errorDetails = '';
+                try {
+                    const errorData = await response.text();
+                    errorDetails = errorData ? ` - ${errorData.substring(0, 100)}` : '';
+                } catch (e) {
+                    // Ignore error reading response body
+                }
+                addLog(`✗ API Error: ${response.status}${errorDetails}`);
                 return false;
             }
         } catch(e) {
