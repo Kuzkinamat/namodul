@@ -77,6 +77,11 @@ window.setDataSource = async (type) => {
         if (await window.MassiveProvider.requestAccess()) {
             renderPairs(window.MassiveProvider.getPairs());
         }
+    } else if (type === 'forex' && window.ForexProvider) {
+        addLog("Initializing Forex Data connection...");
+        if (await window.ForexProvider.requestAccess()) {
+            renderPairs(window.ForexProvider.getPairs());
+        }
     }
     window.onresize(); 
 };
@@ -85,7 +90,8 @@ window.setPair = async (p) => {
     document.getElementById('pair-btn').innerText = p + ' ▾'; 
     const provider = (currentSource === 'synt') ? window.SyntProvider : 
                      (currentSource === 'csv') ? window.CsvProvider :
-                     (currentSource === 'massive') ? window.MassiveProvider : null;
+                     (currentSource === 'massive') ? window.MassiveProvider :
+                     (currentSource === 'forex') ? window.ForexProvider : null;
     if (provider) {
         const newData = await provider.fetchData(currentRange, p);
         if (!newData || !newData.length) return addLog("No data received");
