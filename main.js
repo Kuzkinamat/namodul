@@ -2,8 +2,8 @@
 
 const SCALE_WIDTH = 80;
 let data = [];
-let MARKER_TIMESTAMPS [];
-let current '1M', currentTimeframe = '1min', currentSource = 'none', curM = 0, isSyncing = false;
+let MARKER_TIMESTAMPS = [];
+let currentRange = '1M', currentTimeframe = '1min', currentSource = 'none', curM = 0, isSyncing = false;
 const activePanes = {}, mainSeriesRefs = {};
 
 const addLog = (m) => { 
@@ -106,7 +106,7 @@ window.setPair = async (p) => {
             if(cb.checked) window.toggleIndicator(cb.getAttribute('data-id'), true); 
         });
         updatePopbar();
-        addLog(`Loaded ${p}: ${data.length} candles (Range: ${currentRange}, TF: ${currentTimeframe})`);
+        addLog(`Loadedp}: ${data.length} candles (Range: ${currentRange}, TF: ${currentTimeframe})`);
     }
 };
 
