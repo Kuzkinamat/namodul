@@ -104,8 +104,7 @@ function updatePopbar() {
     const logicalIndex = ts.coordinateToLogical((mainPane.clientWidth - SCALE_WIDTH) / 2);
     if (logicalIndex !== null) {
         const candle = data[Math.round(logicalIndex)];
-        if (candle) {
-            ['open', 'high', 'low', 'close'].forEach(f => { 
+        if (c            ['open', 'high', 'low', 'close'].forEach(f => { 
                 const el = document.getElementById(`val-${f}`);
                 if (el) el.innerText = candle[f].toFixed(5); 
             });
@@ -145,7 +144,7 @@ window.toggleIndicator = function(id, isChecked) {
             s.setData(sma); mainSeriesRefs[id].push(s);
         }
         if (id === 'BB') {
-            const bb = data.map((d, i) => { ifi < 19) return null; 
+            const bb = data.map((d, i) => { if (i < 19) return null; 
                 const sl = data.slice(i-19, i+1).map(x=>x.close), m = sl.reduce((a,b)=>a+b,0)/20, sd = Math.sqrt(sl.reduce((a,b)=>a+Math.pow(b-m,2),0)/20);
                 return { time: d.time, t: m + 2*sd, m: m, b: m - 2*sd };
             }).filter(v => v !== null);
