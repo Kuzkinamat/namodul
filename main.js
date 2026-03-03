@@ -9,7 +9,7 @@ const activePanes = {}, mainSeriesRefs = {};
 const addLog = (m) => { 
     const c = document.getElementById('log-content'); 
     if (c) { 
-        c.innerHTML += `<div><span style="color:#5d606b">[${new Date().toLocaleTimeString()}]</span> ${m}</div>`; 
+        c.innerHTML += `<div><span style=\"color:#5d606b\">[${new Date().toLocaleTimeString()}]</span> ${m}</div>`; 
         c.scrollTop = c.scrollHeight; 
     } 
 };
@@ -49,7 +49,7 @@ window.setRange = (r) => {
 function renderPairs(pairs) {
     const drop = document.getElementById('pair-dropdown');
     if (!drop) return;
-    drop.innerHTML = pairs.length ? '' : '<div class="ind-row">No pairs found</div>';
+    drop.innerHTML = pairs.length ? '' : '<div class=\"ind-row\">No pairs found</div>';
     pairs.forEach(p => { 
         const el = document.createElement('div'); 
         el.className = 'ind-row'; 
@@ -66,26 +66,33 @@ window.setDataSource = async (type) => {
         data = []; candleSeries.setData([]);
         Object.keys(mainSeriesRefs).forEach(id => { mainSeriesRefs[id].forEach(s => chartMain.removeSeries(s)); delete mainSeriesRefs[id]; });
         Object.keys(activePanes).forEach(id => { activePanes[id].chart.remove(); document.getElementById(`wrapper-${id}`)?.remove(); delete activePanes[id]; });
-        document.querySelectorAll('#indicator-menu input[type="checkbox"]').forEach(cb => cb.checked = false);
+        document.querySelectorAll('#indicator-menu input[type=\"checkbox\"]').forEach(cb => cb.checked = false);
         addLog("Source cleared.");
     } else if (type === 'csv' && window.CsvProvider) {
         if (await window.CsvProvider.requestAccess()) renderPairs(await window.CsvProvider.scanFiles());
     } else if (type === 'synt') {
         renderPairs(window.SyntProvider?.getPairs() || []);
+    } else if (type === 'massive' && window.MassiveProvider) {
+        addLog("Initializing Massive API connection...");
+        if (await window.MassiveProvider.requestAccess()) {
+            renderPairs(window.MassiveProvider.getPairs());
+        }
     }
     window.onresize(); 
 };
 
 window.setPair = async (p) => { 
     document.getElementById('pair-btn').innerText = p + ' ▾'; 
-    const provider = (currentSource === 'synt') ? window.SyntProvider : window.CsvProvider;
+    const provider = (currentSource === 'synt') ? window.SyntProvider : 
+                     (currentSource === 'csv') ? window.CsvProvider :
+                     (currentSource === 'massive') ? window.MassiveProvider : null;
     if (provider) {
         const newData = await provider.fetchData(currentRange, p);
         if (!newData || !newData.length) return addLog("No data received");
         data = newData;
         candleSeries.setData(data);
         chartMain.timeScale().fitContent();
-        document.querySelectorAll('#indicator-menu input[type="checkbox"]').forEach(cb => { 
+        document.querySelectorAll('#indicator-menu input[type=\"checkbox\"]').forEach(cb => { 
             if(cb.checked) window.toggleIndicator(cb.getAttribute('data-id'), true); 
         });
         updatePopbar();
@@ -153,7 +160,7 @@ window.toggleIndicator = function(id, isChecked) {
         }
     } else {
         if (!activePanes[id]) {
-            const wr = document.createElement('div'); wr.id = `wrapper-${id}`; wr.className = 'pane-wrapper sub-pane'; wr.innerHTML = `<div class="v-line"></div><div id="chart-${id}" class="chart-container"></div>`;
+            const wr = document.createElement('div'); wr.id = `wrapper-${id}`; wr.className = 'pane-wrapper sub-pane'; wr.innerHTML = `<div class=\"v-line\"></div><div id=\"chart-${id}\" class=\"chart-container\"></div>`;
             document.getElementById('panels-container').appendChild(wr);
             const c = LightweightCharts.createChart(document.getElementById(`chart-${id}`), { ...chartOpts, timeScale: { visible: false } });
             c.timeScale().subscribeVisibleLogicalRangeChange(() => syncAll(c));
