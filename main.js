@@ -106,7 +106,7 @@ window.setPair = async (p) => {
             if(cb.checked) window.toggleIndicator(cb.getAttribute('data-id'), true); 
         });
         updatePopbar();
-        addLog(`Loadedp}: ${data.length} candles (Range: ${currentRange}, TF: ${currentTimeframe})`);
+        addLog(`Loaded ${p}: ${data.length} candles (Range: ${currentRange}, TF: ${currentTimeframe})`);
     }
 };
 
@@ -126,8 +126,7 @@ function updatePopbar() {
     }
 }
 
-function syncAll(source) {
-    if (isSyncing) return; 
+function syncAll(source)iscing) return; 
     isSyncing = true;
     const range = source.timeScale().getVisibleLogicalRange();
     if (range) {
