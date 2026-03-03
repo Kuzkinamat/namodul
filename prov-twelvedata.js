@@ -35,7 +35,7 @@ window.TwelveDataProvider = {
             
             // Test API connection with a simple request
             const testUrl = `${this.baseUrl}/time_series?symbol=EUR/USD&interval=1day&apikey=${this.apiKey}&outputsize=1`;
-            addLog(`Testing API connection...`);
+            addLog(`Testing API connection to: ${testUrl}`);
             
             const response = await fetch(testUrl);
             
@@ -79,27 +79,86 @@ window.TwelveDataProvider = {
      */
     _loadAvailableSymbols: async function() {
         try {
-            addLog("Loading available symbols...");
-            const url = `${this.baseUrl}/symbols?apikey=${this.apiKey}`;
-            const response = await fetch(url);
+            addLog("Loading available symbols from Twelve Data API...");
             
-            if (response.ok) {
-                const data = await response.json();
-                if (data.status === 'ok' && data.data) {
-                    // Filter for forex and crypto symbols
-                    const forexCryptoSymbols = data.data
-                        .filter(item => item.currency_base && item.currency_quote)
-                        .map(item => `${item.symbol}`)
-                        .slice(0, 50); // Limit to 50 symbols
+            // Try different endpoints for symbols
+            const endpoints = [
+                `${this.baseUrl}/symbols?apikey=${this.apiKey}`,
+                `${this.baseUrl}/stocks?apikey=${this.apiKey}`,
+                `${this.baseUrl}/forex_pairs?apikey=${this.apiKey}`,
+                `${this.baseUrl}/cryptocurrencies?apikey=${this.apiKey}`
+            ];
+            
+            let symbolsLoaded = false;
+            
+            for (const url of endpoints) {
+                try {
+                    addLog(`Trying endpoint: ${url}`);
+                    const response = await fetch(url);
                     
-                    if (forexCryptoSymbols.length > 0) {
-                        this.pairs = [...new Set([...forexCryptoSymbols, ...DEFAULT_PAIRS])];
-                        addLog(`✓ Loaded ${this.pairs.length} available symbols`);
+                    addLog(`Response status for ${url}: ${response.status} ${response.statusText}`);
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        addLog(`API response for ${url}: ${JSON.stringify(data).substring(0, 200)}...`);
+                        
+                        if (data.status === 'ok' && data.data) {
+                            // Filter for forex and crypto symbols
+                            const forexCryptoSymbols = data.data
+                                .filter(item => item.currency_base && item.currency_quote)
+                                .map(item => `${item.symbol}`)
+                                .slice(0, 50); // Limit to 50 symbols
+                            
+                            if (forexCryptoSymbols.length > 0) {
+                                this.pairs = [...new Set([...forexCryptoSymbols, ...DEFAULT_PAIRS])];
+                                addLog(`✓ Loaded ${this.pairs.length} available symbols from ${url}`);
+                                symbolsLoaded = true;
+                                break;
+                            }
+                        } else if (data.code) {
+                            addLog(`⚠ API error code: ${data.code}, message: ${data.message}`);
+                        }
+                    } else if (response.status === 404) {
+                        addLog(`⚠ Endpoint not found (404): ${url}`);
+                    } else {
+                        addLog(`⚠ HTTP error ${response.status} for endpoint: ${url}`);
                     }
+                } catch(endpointError) {
+                    addLog(`⚠ Error fetching from ${url}: ${endpointError.message}`);
                 }
             }
+            
+            if (!symbolsLoaded) {
+                addLog(`⚠ Could not load symbols from any endpoint, using default pairs`);
+                // Try a fallback - use time_series endpoint to test individual symbols
+                addLog("Testing individual symbol availability...");
+                const testSymbols = ['EUR/USD', 'BTC/USD', 'SPX'];
+                const availableSymbols = [];
+                
+                for (const symbol of testSymbols) {
+                    try {
+                        const testUrl = `${this.baseUrl}/time_series?symbol=${symbol}&interval=1day&apikey=${this.apiKey}&outputsize=1`;
+                        const response = await fetch(testUrl);
+                        if (response.ok) {
+                            const data = await response.json();
+                            if (data.status === 'ok') {
+                                availableSymbols.push(symbol);
+                                addLog(`✓ Symbol ${symbol} is available`);
+                            }
+                        }
+                    } catch(symbolError) {
+                        addLog(`⚠ Symbol ${symbol} test failed: ${symbolError.message}`);
+                    }
+                }
+                
+                if (availableSymbols.length > 0) {
+                    this.pairs = [...new Set([...availableSymbols, ...DEFAULT_PAIRS])];
+                    addLog(`✓ Using ${this.pairs.length} tested symbols`);
+                }
+            }
+            
         } catch(e) {
-            addLog(`⚠ Could not load symbols: ${e.message}, using default pairs`);
+            addLog(`✗ Error in symbol loading: ${e.message}, using default pairs`);
         }
     },
 
@@ -120,6 +179,7 @@ window.TwelveDataProvider = {
             addLog(`Fetching ${pair} data (${range})...`);
             
             if (this.useMockData) {
+                addLog(`Using mock data for ${pair} (${range})`);
                 return this._generateMockData(range, pair);
             }
             
@@ -149,14 +209,17 @@ window.TwelveDataProvider = {
             // Build API URL
             const url = `${this.baseUrl}/time_series?symbol=${encodeURIComponent(pair)}&interval=${interval}&apikey=${this.apiKey}&outputsize=${outputsize}&format=JSON`;
             
-            addLog(`Requesting data from Twelve Data...`);
+            addLog(`Requesting data from: ${url}`);
             const response = await fetch(url);
+            
+            addLog(`Response status: ${response.status} ${response.statusText}`);
             
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}`);
             }
             
             const data = await response.json();
+            addLog(`API response: ${JSON.stringify(data).substring(0, 200)}...`);
             
             // Check for API errors
             if (data.status === 'error') {
