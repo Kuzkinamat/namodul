@@ -1,0 +1,7 @@
+branch_protection:
+  policies:
+    ## Защита основной ветки от удаления
+    - target: default_branch
+      message: "Deletion of main branch is forbidden"
+      rules:
+        - prevent_deletion
