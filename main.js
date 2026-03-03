@@ -70,8 +70,6 @@ window.setDataSource = async (type) => {
         addLog("Source cleared.");
     } else if (type === 'csv' && window.CsvProvider) {
         if (await window.CsvProvider.requestAccess()) renderPairs(await window.CsvProvider.scanFiles());
-    } else if (type === 'synt') {
-        renderPairs(window.SyntProvider?.getPairs() || []);
     } else if (type === 'twelvedata' && window.TwelveDataProvider) {
         addLog("Initializing Twelve Data API connection...");
         if (await window.TwelveDataProvider.requestAccess()) {
@@ -83,8 +81,7 @@ window.setDataSource = async (type) => {
 
 window.setPair = async (p) => { 
     document.getElementById('pair-btn').innerText = p + ' ▾'; 
-    const provider = (currentSource === 'synt') ? window.SyntProvider : 
-                     (currentSource === 'csv') ? window.CsvProvider :
+    const provider = (currentSource === 'csv') ? window.CsvProvider :
                      (currentSource === 'twelvedata') ? window.TwelveDataProvider : null;
     if (provider) {
         const newData = await provider.fetchData(currentRange, p);
@@ -132,7 +129,7 @@ function syncAll(source) {
 chartMain.timeScale().subscribeVisibleLogicalRangeChange(() => syncAll(chartMain));
 
 window.toggleIndicator = function(id, isChecked) {
- (!is) {
+    if (!isChecked) {
         if (mainSeriesRefs[id]) { mainSeriesRefs[id].forEach(s => chartMain.removeSeries(s)); delete mainSeriesRefs[id]; }
         if (activePanes[id]) { activePanes[id].chart.remove(); document.getElementById(`wrapper-${id}`)?.remove(); delete activePanes[id]; }
         return window.onresize();
@@ -148,8 +145,7 @@ window.toggleIndicator = function(id, isChecked) {
             s.setData(sma); mainSeriesRefs[id].push(s);
         }
         if (id === 'BB') {
-            const bb = data.map((d, i) => { 
-                if (i < 19) return null; 
+            const bb = data.map((d, i) => { ifi < 19) return null; 
                 const sl = data.slice(i-19, i+1).map(x=>x.close), m = sl.reduce((a,b)=>a+b,0)/20, sd = Math.sqrt(sl.reduce((a,b)=>a+Math.pow(b-m,2),0)/20);
                 return { time: d.time, t: m + 2*sd, m: m, b: m - 2*sd };
             }).filter(v => v !== null);
