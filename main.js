@@ -72,15 +72,10 @@ window.setDataSource = async (type) => {
         if (await window.CsvProvider.requestAccess()) renderPairs(await window.CsvProvider.scanFiles());
     } else if (type === 'synt') {
         renderPairs(window.SyntProvider?.getPairs() || []);
-    } else if (type === 'massive' && window.MassiveProvider) {
-        addLog("Initializing Massive API connection...");
-        if (await window.MassiveProvider.requestAccess()) {
-            renderPairs(window.MassiveProvider.getPairs());
-        }
-    } else if (type === 'forex' && window.ForexProvider) {
-        addLog("Initializing Forex Data connection...");
-        if (await window.ForexProvider.requestAccess()) {
-            renderPairs(window.ForexProvider.getPairs());
+    } else if (type === 'twelvedata' && window.TwelveDataProvider) {
+        addLog("Initializing Twelve Data API connection...");
+        if (await window.TwelveDataProvider.requestAccess()) {
+            renderPairs(window.TwelveDataProvider.getPairs());
         }
     }
     window.onresize(); 
@@ -90,8 +85,7 @@ window.setPair = async (p) => {
     document.getElementById('pair-btn').innerText = p + ' ▾'; 
     const provider = (currentSource === 'synt') ? window.SyntProvider : 
                      (currentSource === 'csv') ? window.CsvProvider :
-                     (currentSource === 'massive') ? window.MassiveProvider :
-                     (currentSource === 'forex') ? window.ForexProvider : null;
+                     (currentSource === 'twelvedata') ? window.TwelveDataProvider : null;
     if (provider) {
         const newData = await provider.fetchData(currentRange, p);
         if (!newData || !newData.length) return addLog("No data received");
@@ -138,7 +132,7 @@ function syncAll(source) {
 chartMain.timeScale().subscribeVisibleLogicalRangeChange(() => syncAll(chartMain));
 
 window.toggleIndicator = function(id, isChecked) {
-    if (!isChecked) {
+ (!is) {
         if (mainSeriesRefs[id]) { mainSeriesRefs[id].forEach(s => chartMain.removeSeries(s)); delete mainSeriesRefs[id]; }
         if (activePanes[id]) { activePanes[id].chart.remove(); document.getElementById(`wrapper-${id}`)?.remove(); delete activePanes[id]; }
         return window.onresize();
