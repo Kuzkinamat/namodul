@@ -20,7 +20,7 @@
         #main-pane { flex: 1 1 auto; min-height: 100px; }
         .sub-pane { height: 130px; flex-shrink: 0; }
         .chart-container { width: 100%; height: 100%; flex: 1; }
-        #popbar { position: absolute; top: 15px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; z-index: 2000; pointer-events: none; }
+        #popbar { position: absolute; top: 15px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; z-index: 1000; pointer-events: none; }
         .info-box { background: rgba(25, 27, 34, 0.9); border: 1px solid #363c4e; border-radius: 4px; padding: 4px 10px; min-width: 75px; display: flex; flex-direction: column; align-items: center; }
         .info-label { font-size: 9px; color: #787b86; text-transform: uppercase; }
         .info-value { font-size: 13px; font-weight: bold; color: #d1d4dc; }
@@ -34,15 +34,20 @@
 <body>
     <div id="topbar">
         <div class="menu-item">
-            <button id="range-btn" class="nav-btn">1D ▾</button>
+            <button id="range-btn" class="nav-btn">1M ▾</button>
             <div class="dropdown">
-                <div class="ind-row" onclick="setRange('1min')">1min</div>
-                <div class="ind-row" onclick="setRange('5min')">5min</div>
-                <div class="ind-row" onclick="setRange('15min')">15min</div>
                 <div class="ind-row" onclick="setRange('1D')">1D</div>
                 <div class="ind-row" onclick="setRange('1W')">1W</div>
                 <div class="ind-row" onclick="setRange('1M')">1M</div>
                 <div class="ind-row" onclick="setRange('1Y')">1Y</div>
+            </div>
+        </div>
+        <div class="menu-item">
+            <button id="timeframe-btn" class="nav-btn">1min ▾</button>
+            <div class="dropdown">
+                <div class="ind-row" onclick="setTimeframe('1min')">1min</div>
+                <div class="ind-row" onclick="setTimeframe('5min')">5min</div>
+                <div class="ind-row" onclick="setTimeframe('15min')">15min</div>
             </div>
         </div>
         <div class="menu-item">
