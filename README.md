@@ -1,3 +1,1 @@
-# namodul
-
-Терминал/бот
+FOREX strategy tester / trading signal bot
