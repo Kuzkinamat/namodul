@@ -51,8 +51,7 @@ function calcRSI(data, p) {
         avgLoss = (avgLoss * (p - 1) + loss) / p;
         
         rsiValue = avgLoss === 0 ? 100 : 100 - (100 / (1 + (avgGain / avgLoss)));
-        
-        rsiData.push({ time: data[i].time, value: rsiValue });
+        rsiData.push({ time].time, value:siValue });
     }
     
     return rsiData;
