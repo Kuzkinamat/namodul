@@ -32,7 +32,7 @@ function calculateEMA(arr, period) {
 function calculateRSI(data, period) {
     if (data.length <= period) return [];
     
-    let rsiData = [], avgGain = 0, avgLoss = 0;
+    let rsiData = [], avgGain0;
     
     // Calculate initial average gain and loss
     for (let i = 1; i <= period; i++) {
