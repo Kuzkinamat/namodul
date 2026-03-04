@@ -32,17 +32,23 @@ function calculateEMA(arr, period) {
 function calculateRSI(data, period) {
     if (data.length <= period) return [];
     
-    let rsiData = [], avgGain0;
+    let rsiData = [];
+    let avgGain = 0, avgLoss = 0;
     
     // Calculate initial average gain and loss
     for (let i = 1; i <= period; i++) {
         const diff = data[i].close - data[i-1].close;
-        if (diff > 0) avgGain += diff; 
-        else avgLoss -= diff;
+        if (diff > 0) {
+            avgGain += diff;
+        } else {
+            avgLoss -= diff; // diff is negative, so we subtract to get positive loss
+        }
     }
     
-    avgGain /= period; 
+    avgGain /= period;
     avgLoss /= period;
+    
+    // Calculate first RSI value
     let rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
     rsiData.push({ time: data[period].time, value: 100 - (100 / (1 + rs)) });
 

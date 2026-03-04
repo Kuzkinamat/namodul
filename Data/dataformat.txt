@@ -1,5 +1,0 @@
-﻿headline=true
-separator=,
-columns=ticker,date,time,open,high,low,close,volume
-dateformat=YYYYMMDD
-timeformat=HHMMSS
