@@ -14,30 +14,13 @@ const addLog = (m) => {
     } 
 };
 
-// Chart configuration for main chart
+// Chart configuration
 const chartOpts = { 
     layout: { background: { color: '#131722' }, textColor: '#d1d4dc' }, 
     rightPriceScale: { borderColor: '#363c4e', minimumWidth: SCALE_WIDTH }, 
     grid: { vertLines: { visible: false }, horzLines: { color: '#242733' } }, 
     crosshair: { mode: LightweightCharts.CrosshairMode.Hidden },
     timeScale: { borderColor: '#363c4e', timeVisible: true, rightOffset: 80 } 
-};
-
-// Chart configuration for indicator charts (RSI, MACD)
-const indicatorChartOpts = {
-    layout: { background: { color: '#131722' }, textColor: '#d1d4dc' },
-    rightPriceScale: { 
-        borderColor: '#363c4e', 
-        minimumWidth: SCALE_WIDTH,
-        autoScale: true,
-        scaleMargins: {
-            top: 0.1,
-            bottom: 0.1
-        }
-    },
-    grid: { vertLines: { visible: false }, horzLines: { color: '#242733' } },
-    crosshair: { mode: LightweightCharts.CrosshairMode.Hidden },
-    timeScale: { borderColor: '#363c4e', visible: false }
 };
 
 const chartMain = LightweightCharts.createChart(document.getElementById('chart-main'), chartOpts);
@@ -119,8 +102,6 @@ window.setPair = async (p) => {
         data = newData;
         candleSeries.setData(data);
         chartMain.timeScale().fitContent();
-        // Синхронизируем все графики после загрузки новых данных
-        syncAll(chartMain);
         document.querySelectorAll('#indicator-menu input[type=\"checkbox\"]').forEach(cb => { 
             if(cb.checked) window.toggleIndicator(cb.getAttribute('data-id'), true); 
         });
@@ -148,17 +129,17 @@ function updatePopbar() {
 function syncAll(source) {
     if (isSyncing) return; 
     isSyncing = true;
-    const timeRange = source.timeScale().getVisibleRange();
-    if (timeRange) {
+    const range = source.timeScale().getVisibleLogicalRange();
+    if (range) {
         [chartMain, ...Object.values(activePanes).map(p => p.chart)].forEach(c => { 
-            if (c && c !== source) c.timeScale().setVisibleRange(timeRange); 
+            if (c && c !== source) c.timeScale().setVisibleLogicalRange(range); 
         });
     }
     updatePopbar(); 
     isSyncing = false;
 }
 
-chartMain.timeScale().subscribeVisibleTimeRangeChange(() => syncAll(chartMain));
+chartMain.timeScale().subscribeVisibleLogicalRangeChange(() => syncAll(chartMain));
 
 window.toggleIndicator = function(id, isChecked) {
     if (!isChecked) {
@@ -190,81 +171,27 @@ window.toggleIndicator = function(id, isChecked) {
         if (!activePanes[id]) {
             const wr = document.createElement('div'); wr.id = `wrapper-${id}`; wr.className = 'pane-wrapper sub-pane'; wr.innerHTML = `<div class=\"v-line\"></div><div id=\"chart-${id}\" class=\"chart-container\"></div>`;
             document.getElementById('panels-container').appendChild(wr);
-            
-            // Создаем график с конфигурацией для индикаторов
-            const c = LightweightCharts.createChart(document.getElementById(`chart-${id}`), indicatorChartOpts);
-            c.timeScale().subscribeVisibleTimeRangeChange(() => syncAll(c));
+            const c = LightweightCharts.createChart(document.getElementById(`chart-${id}`), { ...chartOpts, timeScale: { visible: false } });
+            c.timeScale().subscribeVisibleLogicalRangeChange(() => syncAll(c));
             activePanes[id] = { chart: c, series: [] };
-            
-            // Устанавливаем тот же видимый диапазон, что и у основного графика
-            const mainTimeRange = chartMain.timeScale().getVisibleRange();
-            if (mainTimeRange) {
-                c.timeScale().setVisibleRange(mainTimeRange);
-            }
         }
         const pane = activePanes[id];
         pane.series.forEach(s => pane.chart.removeSeries(s)); pane.series = [];
         if (id === 'RSI') {
-            const s = pane.chart.addSeries(LightweightCharts.LineSeries, { 
-                color: '#ff00a6', 
-                lineWidth: 1, 
-                lastValueVisible: false, 
-                priceLineVisible: false,
-                priceScaleId: 'right'
-            });
-            const rsiData = calcRSI(data, 14);
-            s.setData(rsiData); 
-            pane.series.push(s);
-            
-            // Настраиваем вертикальный масштаб для RSI (0-100)
-            if (rsiData.length > 0) {
-                pane.chart.priceScale('right').applyOptions({
-                    autoScale: true,
-                    scaleMargins: {
-                        top: 0.1,
-                        bottom: 0.1
-                    }
-                });
-            }
+            const s = pane.chart.addSeries(LightweightCharts.LineSeries, { color: '#ff00a6', lineWidth: 1, lastValueVisible: false, priceLineVisible: false });
+            s.setData(calcRSI(data, 14)); pane.series.push(s);
         }
         if (id === 'MACD') {
-            const h = pane.chart.addSeries(LightweightCharts.HistogramSeries, { 
-                lastValueVisible: false, 
-                priceLineVisible: false,
-                priceScaleId: 'right'
-            });
-            const l1 = pane.chart.addSeries(LightweightCharts.LineSeries, { 
-                color: '#2196f3', 
-                lineWidth: 1, 
-                lastValueVisible: false, 
-                priceLineVisible: false,
-                priceScaleId: 'right'
-            });
-            const l2 = pane.chart.addSeries(LightweightCharts.LineSeries, { 
-                color: '#ff9800', 
-                lineWidth:1, 
-                lastValueVisible: false, 
-                priceLineVisible: false,
-                priceScaleId: 'right'
-            });
+            const h = pane.chart.addSeries(LightweightCharts.HistogramSeries, { lastValueVisible: false, priceLineVisible: false });
+            const l1 = pane.chart.addSeries(LightweightCharts.LineSeries, { color: '#2196f3', lineWidth: 1, lastValueVisible: false, priceLineVisible: false });
+            const l2 = pane.chart.addSeries(LightweightCharts.LineSeries, { color: '#ff9800', lineWidth:1, lastValueVisible: false, priceLineVisible: false });
             const e12 = calcEMA(data, 12), e26 = calcEMA(data, 26);
             const m = e12.map((e,i)=>({time: e.time, value: e.value - e26[i].value}));
             const sig = calcEMA(m, 9);
             h.setData(m.map((v,i)=>({time: v.time, value: v.value - (sig[i]?.value || 0), color: (v.value-(sig[i]?.value||0))>=0?'#26a69a':'#ef5350'})));
             l1.setData(m); l2.setData(sig); pane.series.push(h, l1, l2);
-            
-            // Настраиваем вертикальный масштаб для MACD
-            pane.chart.priceScale('right').applyOptions({
-                autoScale: true,
-                scaleMargins: {
-                    top: 0.2,
-                    bottom: 0.2
-                }
-            });
         }
-        window.onresize(); 
-        // Синхронизируем все графики после добавления индикатора
-        syncAll(chartMain);
+        window.onresize(); syncAll(chartMain);
     }
 };
 
@@ -273,8 +200,6 @@ window.changeMarker = (dir) => {
         curM = (curM + dir + MARKER_TIMESTAMPS.length) % MARKER_TIMESTAMPS.length; 
         const ts = MARKER_TIMESTAMPS[curM];
         chartMain.timeScale().setVisibleRange({ from: ts - 3600, to: ts + 3600 }); 
-        // Синхронизируем все графики при изменении маркера
-        syncAll(chartMain);
     } 
 };
 
