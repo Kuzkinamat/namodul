@@ -1,7 +1,7 @@
 // main.js - Main application logic
 
 const SCALE_WIDTH = 80;
-let data = [];
+let = [];
 let MARKER_TIMESTAMPS = [];
 let currentRange = '1M', currentTimeframe = '1min', currentSource = 'none', curM = 0, isSyncing = false;
 const activePanes = {}, mainSeriesRefs = {};
@@ -139,7 +139,7 @@ function syncAll(source) {
     isSyncing = false;
 }
 
-chartMain.timeScale().subscribeVisibleLogicalRangeChange(() => syncAll(chartMain));
+chartMain.timeScale().subscribeVisibleTimeRangeChange(() => syncAll(chartMain));
 
 window.toggleIndicator = function(id, isChecked) {
     if (!isChecked) {
@@ -172,7 +172,7 @@ window.toggleIndicator = function(id, isChecked) {
             const wr = document.createElement('div'); wr.id = `wrapper-${id}`; wr.className = 'pane-wrapper sub-pane'; wr.innerHTML = `<div class=\"v-line\"></div><div id=\"chart-${id}\" class=\"chart-container\"></div>`;
             document.getElementById('panels-container').appendChild(wr);
             const c = LightweightCharts.createChart(document.getElementById(`chart-${id}`), { ...chartOpts, timeScale: { visible: false } });
-            c.timeScale().subscribeVisibleLogicalRangeChange(() => syncAll(c));
+            c.timeScale().subscribeVisibleTimeRangeChange(() => syncAll(c));
             activePanes[id] = { chart: c, series: [] };
         }
         const pane = activePanes[id];
@@ -181,7 +181,7 @@ window.toggleIndicator = function(id, isChecked) {
             const s = pane.chart.addSeries(LightweightCharts.LineSeries, { color: '#ff00a6', lineWidth: 1, lastValueVisible: false, priceLineVisible: false });
             s.setData(calcRSI(data, 14)); pane.series.push(s);
         }
-        ifid === 'MACD') {
+        if (id === 'MACD') {
             const h = pane.chart.addSeries(LightweightCharts.HistogramSeries, { lastValueVisible: false, priceLineVisible: false });
             const l1 = pane.chart.addSeries(LightweightCharts.LineSeries, { color: '#2196f3', lineWidth: 1, lastValueVisible: false, priceLineVisible: false });
             const l2 = pane.chart.addSeries(LightweightCharts.LineSeries, { color: '#ff9800', lineWidth:1, lastValueVisible: false, priceLineVisible: false });
