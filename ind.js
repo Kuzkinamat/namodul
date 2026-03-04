@@ -1,6 +1,6 @@
 // Indicator rendering logic
 
-const calcEMA = (arr, p) => {
+function calcEMA(arr, p) {
     if (!arr || !arr.length) return [];
     const k = 2 / (p + 1);
     let ema = [];
@@ -12,9 +12,9 @@ const calcEMA = (arr, p) => {
         prev = v;
     });
     return ema;
-};
+}
 
-const calcRSI = (data, p) => {
+function calcRSI(data, p) {
     if (data.length <= p) {
         // Если данных меньше или равно периоду, возвращаем массив с null значениями
         return data.map(d => ({ time: d.time, value: null }));
@@ -61,7 +61,7 @@ const calcRSI = (data, p) => {
     }
     
     return rsiData;
-};
+}
 
 // Export for use in other modules
 if (typeof module !== 'undefined' && module.exports) {
