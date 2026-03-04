@@ -129,10 +129,10 @@ function updatePopbar() {
 function syncAll(source) {
     if (isSyncing) return; 
     isSyncing = true;
-    const range = source.timeScale().getVisibleLogicalRange();
-    if (range) {
+    const timeRange = source.timeScale().getVisibleRange();
+    if (timeRange) {
         [chartMain, ...Object.values(activePanes).map(p => p.chart)].forEach(c => { 
-            if (c && c !== source) c.timeScale().setVisibleLogicalRange(range); 
+            if (c && c !== source) c.timeScale().setVisibleRange(timeRange); 
         });
     }
     updatePopbar(); 
@@ -181,7 +181,7 @@ window.toggleIndicator = function(id, isChecked) {
             const s = pane.chart.addSeries(LightweightCharts.LineSeries, { color: '#ff00a6', lineWidth: 1, lastValueVisible: false, priceLineVisible: false });
             s.setData(calcRSI(data, 14)); pane.series.push(s);
         }
-        if (id === 'MACD') {
+        ifid === 'MACD') {
             const h = pane.chart.addSeries(LightweightCharts.HistogramSeries, { lastValueVisible: false, priceLineVisible: false });
             const l1 = pane.chart.addSeries(LightweightCharts.LineSeries, { color: '#2196f3', lineWidth: 1, lastValueVisible: false, priceLineVisible: false });
             const l2 = pane.chart.addSeries(LightweightCharts.LineSeries, { color: '#ff9800', lineWidth:1, lastValueVisible: false, priceLineVisible: false });
