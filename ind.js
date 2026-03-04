@@ -17,7 +17,7 @@ function calcEMA(arr, p) {
     return ema;
 }
 
-const calcRSI = (data, p) => {
+function calcRSI(data, p) {
     if (data.length <= p) return [];
     let rsiData = [], avgGain = 0, avgLoss = 0;
     for (let i = 1; i <= p; i++) {
@@ -37,7 +37,7 @@ const calcRSI = (data, p) => {
         rsiData.push({ time: data[i].time, value: 100 - (100 / (1 + rs)) });
     }
     return rsiData;
-};
+}
 
 // Export for use in other modules
 if (typeof module !== 'undefined' && module.exports) {
