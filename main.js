@@ -110,7 +110,7 @@ window.setPair = async (p) => {
         // Combine range and timeframe for data fetching
         const combinedRange = currentTimeframe === '1min' ? '1min' :
                              currentTimeframe === '5min' ? '5min' :
-                             current15min' ? '15min' :
+                             currentTimeframe === '15min' ? '15min' :
                              currentRange;
         
         addLog(`Fetching data: ${p}, Range: ${currentRange}, Timeframe: ${currentTimeframe}`);
