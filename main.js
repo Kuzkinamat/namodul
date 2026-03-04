@@ -143,7 +143,7 @@ chartMain.timeScale().subscribeVisibleTimeRangeChange(() => syncAll(chartMain));
 
 window.toggleIndicator = function(id, isChecked) {
     if (!isChecked) {
-        if (mainSeriesRefs[id]) { mainSeriess].forEach(sMain.remove(s)); delete mainSeriesRefs[id]; }
+        if (mainSeriesRefs[id]) { mainSeriesRefs[id].forEach(s => chartMain.removeSeries(s)); delete mainSeriesRefs[id]; }
         if (activePanes[id]) { activePanes[id].chart.remove(); document.getElementById(`wrapper-${id}`)?.remove(); delete activePanes[id]; }
         return window.onresize();
     }
