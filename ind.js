@@ -3,7 +3,7 @@
 // calc.js - Calculation utilities for indicators
 // EMA and RSI calculations
 
-const calcEMA = (arr, p) => {
+function calcEMA(arr, p) {
     if (!arr || !arr.length) return [];
     const k = 2 / (p + 1);
     let ema = [];
@@ -15,7 +15,7 @@ const calcEMA = (arr, p) => {
         prev = v;
     });
     return ema;
-};
+}
 
 const calcRSI = (data, p) => {
     if (data.length <= p) return [];
