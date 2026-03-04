@@ -15,24 +15,51 @@ const calcEMA = (arr, p) => {
 };
 
 const calcRSI = (data, p) => {
-    if (data.length <= p) return [];
-    let rsiData = [], avgGain = 0, avgLoss = 0;
+    if (data.length <= p) {
+        // Если данных меньше или равно периоду, возвращаем массив с null значениями
+        return data.map(d => ({ time: d.time, value: null }));
+    }
+    
+    let rsiData = [];
+    let avgGain = 0, avgLoss = 0;
+    
+    // Заполняем первые p элементов null значениями
+    for (let i = 0; i < p; i++) {
+        rsiData.push({ time: data[i].time, value: null });
+    }
+    
+    // Рассчитываем начальные средние gain/loss
     for (let i = 1; i <= p; i++) {
         const diff = data[i].close - data[i-1].close;
-        if (diff > 0) avgGain += diff; else avgLoss -= diff;
+        if (diff > 0) avgGain += diff; 
+        else avgLoss -= diff;
     }
-    avgGain /= p; avgLoss /= p;
+    avgGain /= p; 
+    avgLoss /= p;
+    
+    // Первое значение RSI
     let rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
-    rsiData.push({ time: data[p].time, value: 100 - (100 / (1 + rs)) });
-
+    let rsiValue = 100 - (100 / (1 + rs));
+    // Исправляем случай, когда avgLoss = 0
+    if (avgLoss === 0) rsiValue = 100;
+    rsiData.push({ time: data[p].time, value: rsiValue });
+    
+    // Рассчитываем остальные значения RSI
     for (let i = p + 1; i < data.length; i++) {
         const diff = data[i].close - data[i-1].close;
-        let gain = diff > 0 ? diff : 0, loss = diff < 0 ? -diff : 0;
+        let gain = diff > 0 ? diff : 0;
+        let loss = diff < 0 ? -diff : 0;
+        
         avgGain = (avgGain * (p - 1) + gain) / p;
         avgLoss = (avgLoss * (p - 1) + loss) / p;
+        
         rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
-        rsiData.push({ time: data[i].time, value: 100 - (100 / (1 + rs)) });
+        rsiValue = 100 - (100 / (1 + rs));
+        if (avgLoss === 0) rsiValue = 100;
+        
+        rsiData.push({ time: data[i].time, value: rsiValue });
     }
+    
     return rsiData;
 };
 
