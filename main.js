@@ -102,6 +102,8 @@ window.setPair = async (p) => {
         data = newData;
         candleSeries.setData(data);
         chartMain.timeScale().fitContent();
+        // Синхронизируем все графики после загрузки новых данных
+        syncAll(chartMain);
         document.querySelectorAll('#indicator-menu input[type=\"checkbox\"]').forEach(cb => { 
             if(cb.checked) window.toggleIndicator(cb.getAttribute('data-id'), true); 
         });
@@ -171,9 +173,18 @@ window.toggleIndicator = function(id, isChecked) {
         if (!activePanes[id]) {
             const wr = document.createElement('div'); wr.id = `wrapper-${id}`; wr.className = 'pane-wrapper sub-pane'; wr.innerHTML = `<div class=\"v-line\"></div><div id=\"chart-${id}\" class=\"chart-container\"></div>`;
             document.getElementById('panels-container').appendChild(wr);
-            const c = LightweightCharts.createChart(document.getElementById(`chart-${id}`), { ...chartOpts, timeScale: { visible: false } });
+            const c = LightweightCharts.createChart(document.getElementById(`chart-${id}`), { 
+                ...chartOpts, 
+                timeScale: { visible: false, borderColor: '#363c4e' } 
+            });
             c.timeScale().subscribeVisibleTimeRangeChange(() => syncAll(c));
             activePanes[id] = { chart: c, series: [] };
+            
+            // Устанавливаем тот же видимый диапазон, что и у основного графика
+            const mainTimeRange = chartMain.timeScale().getVisibleRange();
+            if (mainTimeRange) {
+                c.timeScale().setVisibleRange(mainTimeRange);
+            }
         }
         const pane = activePanes[id];
         pane.series.forEach(s => pane.chart.removeSeries(s)); pane.series = [];
@@ -191,15 +202,19 @@ window.toggleIndicator = function(id, isChecked) {
             h.setData(m.map((v,i)=>({time: v.time, value: v.value - (sig[i]?.value || 0), color: (v.value-(sig[i]?.value||0))>=0?'#26a69a':'#ef5350'})));
             l1.setData(m); l2.setData(sig); pane.series.push(h, l1, l2);
         }
-        window.onresize(); syncAll(chartMain);
+        window.onresize(); 
+        // Синхронизируем все графики после добавления индикатора
+        syncAll(chartMain);
     }
 };
 
 window.changeMarker = (dir) => { 
     if (MARKER_TIMESTAMPS.length) { 
-        curM = (curM + dir + MARKER_TIMESTAMPS.length) % MARKER_TIMESTAMPS.length; 
+        curM = (curM + MARKER_TIMESTAMPS.length) % MARKER_TIMESTAMPS.length; 
         const ts = MARKER_TIMESTAMPS[curM];
         chartMain.timeScale().setVisibleRange({ from: ts - 3600, to: ts + 3600 }); 
+        // Синхронизируем все графики при изменении маркера
+        syncAll(chartMain);
     } 
 };
 
