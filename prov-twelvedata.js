@@ -4,7 +4,7 @@
 const TWELVEDATA_API_KEY = 'aa6331f5e6cc4e3491b731e0dda2955f';
 const TWELVEDATA_API_URL = 'https://api.twelvedata.com';
 
-// Default forex pairs
+// Default forex pairs (only major pairs)
 const DEFAULT_PAIRS = [
     // Forex majors
     'EUR/USD', 'GBP/USD', 'USD/JPY', 'USD/CHF', 'AUD/USD', 'USD/CAD', 'NZD/USD',
@@ -38,8 +38,8 @@ window.TwelveDataProvider = {
                 if (data.status === 'ok' && data.values) {
                     addLog(`✓ Twelve Data API connected successfully`);
                     
-                    // Try to get available symbols
-                    await this._loadAvailableSymbols();
+                    // Don't load additional symbols, use only DEFAULT_PAIRS
+                    addLog(`Using ${this.pairs.length} default forex pairs`);
                     
                     return true;
                 } else if (data.code === 429) {
@@ -60,54 +60,19 @@ window.TwelveDataProvider = {
     },
 
     /**
-     * Load available symbols from Twelve Data API
+     * Get list of available trading pairs
+     * Returns only the symbol pairs (e.g., "EUR/USD")
      */
-    _loadAvailableSymbols: async function() {
-        try {
-            addLog("Loading available symbols from Twelve Data API...");
-            
-            // Use only forex_pairs endpoint
-            const url = `${this.baseUrl}/forex_pairs?apikey=${this.apiKey}`;
-            
-            addLog(`Trying endpoint: ${url}`);
-            const response = await fetch(url);
-            
-            addLog(`Response status: ${response.status} ${response.statusText}`);
-            
-            if (response.ok) {
-                const data = await response.json();
-                addLog(`API response: ${JSON.stringify(data).substring(0, 200)}...`);
-                
-                if (data.status === 'ok' && data.data) {
-                    // Filter for forex pairs with currency_group = "Major"
-                    const majorForexPairs = data.data
-                        .filter(item => item.currency_group === 'Major')
-                        .map(item => `${item.currency_base}/${item.currency_quote}`);
-                    
-                    if (majorForexPairs.length > 0) {
-                        this.pairs = [...new Set([...majorForexPairs, ...DEFAULT_PAIRS])];
-                        addLog(`✓ Loaded ${this.pairs.length} major forex pairs`);
-                    } else {
-                        addLog(`⚠ No major forex pairs found, using default pairs`);
-                    }
-                } else if (data.code) {
-                    addLog(`⚠ API error code: ${data.code}, message: ${data.message}`);
-                }
-            } else if (response.status === 404) {
-                addLog(`⚠ Endpoint not found (404): ${url}`);
-            } else {
-                addLog(`⚠ HTTP error ${response.status} for endpoint: ${url}`);
-            }
-            
-        } catch(e) {
-            addLog(`✗ Error in symbol loading: ${e.message}, using default pairs`);
-        }
+    getPairs: function() {
+        return this.pairs;
     },
 
     /**
-     * Get list of available trading pairs
+     * Get display names for pairs (short format)
+     * Returns abbreviated names for display purposes
      */
-    getPairs: function() {
+    getDisplayPairs: function() {
+        // Return the same pairs for now (could be customized for display)
         return this.pairs;
     },
 
