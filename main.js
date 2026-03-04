@@ -1,7 +1,7 @@
 // main.js - Main application logic
 
 const SCALE_WIDTH = 80;
-let = [];
+let data = [];
 let MARKER_TIMESTAMPS = [];
 let currentRange = '1M', currentTimeframe = '1min', currentSource = 'none', curM = 0, isSyncing = false;
 const activePanes = {}, mainSeriesRefs = {};
@@ -143,7 +143,7 @@ chartMain.timeScale().subscribeVisibleTimeRangeChange(() => syncAll(chartMain));
 
 window.toggleIndicator = function(id, isChecked) {
     if (!isChecked) {
-        if (mainSeriesRefs[id]) { mainSeriesRefs[id].forEach(s => chartMain.removeSeries(s)); delete mainSeriesRefs[id]; }
+        if (mainSeriesRefs[id]) { mainSeriess].forEach(sMain.remove(s)); delete mainSeriesRefs[id]; }
         if (activePanes[id]) { activePanes[id].chart.remove(); document.getElementById(`wrapper-${id}`)?.remove(); delete activePanes[id]; }
         return window.onresize();
     }
