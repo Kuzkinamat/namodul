@@ -6,7 +6,7 @@ function calcEMA(arr, p) {
     let ema = [];
     let prev = (arr[0].close !== undefined) ? arr[0].close : arr[0].value;
     arr.forEach((d, i) => {
-        let val = (d.close !== undefined) ? d.close : d.value;
+        let val =d.close !== undefined) ? d.close : d.value;
         let v = (i === 0) ? prev : (val - prev) * k + prev;
         ema.push({ time: d.time, value: v });
         prev = v;
@@ -38,10 +38,7 @@ function calcRSI(data, p) {
     avgLoss /= p;
     
     // Первое значение RSI
-    let rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
-    let rsiValue = 100 - (100 / (1 + rs));
-    // Исправляем случай, когда avgLoss = 0
-    if (avgLoss === 0) rsiValue = 100;
+    let rsiValue = avgLoss === 0 ? 100 : 100 - (100 / (1 + (avgGain / avgLoss)));
     rsiData.push({ time: data[p].time, value: rsiValue });
     
     // Рассчитываем остальные значения RSI
@@ -53,19 +50,12 @@ function calcRSI(data, p) {
         avgGain = (avgGain * (p - 1) + gain) / p;
         avgLoss = (avgLoss * (p - 1) + loss) / p;
         
-        rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
-        rsiValue = 100 - (100 / (1 + rs));
-        if (avgLoss === 0) rsiValue = 100;
+        rsiValue = avgLoss === 0 ? 100 : 100 - (100 / (1 + (avgGain / avgLoss)));
         
         rsiData.push({ time: data[i].time, value: rsiValue });
     }
     
     return rsiData;
-}
-
-// Export for use in other modules
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { calcEMA, calcRSI };
 }
 
 // Simple Moving Average (SMA)
