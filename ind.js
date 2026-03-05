@@ -29,12 +29,21 @@ function calculateEMA(arr, period) {
  * @param {number} kPeriod - %K period (typically 14)
  * @param {number} dPeriod - %D period (typically 3)
  * @param {number} slowing - Slowing period (typically 3)
- * @returns {Array} Array of objects with {time, k, d} properties
+ * @returns {Array} Array of objects with {time, k, d} properties (k and d can be null for insufficient data)
  */
 function calculateStochastic(data, kPeriod = 14, dPeriod = 3, slowing = 3) {
-    if (data.length < kPeriod + slowing - 1) return [];
+    if (data.length < kPeriod) return data.map(d => ({ time: d.time, k: null, d: null }));
     
     const stochasticData = [];
+    
+    // Initialize result array with null values
+    for (let i = 0; i < data.length; i++) {
+        stochasticData.push({
+            time: data[i].time,
+            k: null,
+            d: null
+        });
+    }
     
     // Calculate %K values
     const kValues = [];
@@ -50,7 +59,7 @@ function calculateStochastic(data, kPeriod = 14, dPeriod = 3, slowing = 3) {
         
         const close = data[i].close;
         const k = highestHigh - lowestLow === 0 ? 50 : 100 * (close - lowestLow) / (highestHigh - lowestLow);
-        kValues.push({ time: data[i].time, value: k });
+        kValues.push({ time: data[i].time, value: k, index: i });
     }
     
     // Apply slowing to %K
@@ -62,25 +71,36 @@ function calculateStochastic(data, kPeriod = 14, dPeriod = 3, slowing = 3) {
                 sum += kValues[j].value;
             }
             const slowedK = sum / slowing;
-            slowedKValues.push({ time: kValues[i].time, value: slowedK });
+            slowedKValues.push({ 
+                time: kValues[i].time, 
+                value: slowedK, 
+                index: kValues[i].index 
+            });
         }
     } else {
-        slowedKValues.push(...kValues);
+        kValues.forEach(kv => {
+            slowedKValues.push({ 
+                time: kv.time, 
+                value: kv.value, 
+                index: kv.index 
+            });
+        });
     }
     
-    // Calculate %D (SMA of slowed %K)
+    // Fill %K values in result array
+    slowedKValues.forEach(kv => {
+        stochasticData[kv.index].k = kv.value;
+    });
+    
+    // Calculate %D (SMA of slowed %K) and fill in result array
     for (let i = dPeriod - 1; i < slowedKValues.length; i++) {
         let sum = 0;
         for (let j = i - dPeriod + 1; j <= i; j++) {
             sum += slowedKValues[j].value;
         }
         const d = sum / dPeriod;
-        
-        stochasticData.push({
-            time: slowedKValues[i].time,
-            k: slowedKValues[i].value,
-            d: d
-        });
+        const targetIndex = slowedKValues[i].index;
+        stochasticData[targetIndex].d = d;
     }
     
     return stochasticData;

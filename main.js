@@ -27,7 +27,7 @@ const chartMain = LightweightCharts.createChart(document.getElementById('chart-m
 const candleSeries = chartMain.addSeries(LightweightCharts.CandlestickSeries, { 
     upColor: '#26a69a', downColor: '#ef5350', lastValueVisible: false, priceLineVisible: false});
 
-windowize => { 
+window.onresize = () => { 
     const container = document.getElementById('main-pane');
     if (!container) return;
     chartMain.resize(container.clientWidth, container.clientHeight); 
@@ -158,7 +158,7 @@ window.toggleIndicator = function(id, isChecked) {
         }
         if (id === 'BB') {
             const bb = data.map((d, i) => { if (i < 19) return null; 
-                const sl = data.slice(i-19, i+1).map(x=>x.close), m = sl.reduce((a,b)=>a+b,0)/20, sd = Math.sqrt(sl.reduce((a,b)=>a+Math.pow(b-m,2),0)/20);
+                const sl = data.slice(i-19, i+1).map(x=>x.close), m = sl.reduce((a,b)=>a+b,0)/(sl.reduce)=>a+Math.pow(b-m,2),0)/20);
                 return { time: d.time, t: m + 2*sd, m: m, b: m - 2*sd };
             }).filter(v => v !== null);
             [{k:'t', c:'rgba(38,166,154,0.3)'}, {k:'m', c:'rgba(33,150,243,0.5)'}, {k:'b', c:'rgba(38,166,154,0.3)'}].forEach(o => {
@@ -178,14 +178,16 @@ window.toggleIndicator = function(id, isChecked) {
         pane.series.forEach(s => pane.chart.removeSeries(s)); pane.series = [];
         if (id === 'Stochastic') {
             const stochasticData = calcStochastic(data, 14, 3, 3);
-            // Create line for %K
+            // Create line for %K - filter out null values
             const kLine = pane.chart.addSeries(LightweightCharts.LineSeries, { color: '#ff00a6', lineWidth: 1, lastValueVisible: false, priceLineVisible: false });
-            kLine.setData(stochasticData.map(d => ({ time: d.time, value: d.k })));
+            const kData = stochasticData.map(d => d.k === null ? null : { time: d.time, value: d.k }).filter(v => v !== null);
+            kLine.setData(kData);
             pane.series.push(kLine);
             
-            // Create line for %D
+            // Create line for %D - filter out null values
             const dLine = pane.chart.addSeries(LightweightCharts.LineSeries, { color: '#2196f3', lineWidth: 1, lastValueVisible: false, priceLineVisible: false });
-            dLine.setData(stochasticData.map(d => ({ time: d.time, value: d.d })));
+            const dData = stochasticData.map(d => d.d === null ? null : { time: d.time, value: d.d }).filter(v => v !== null);
+            dLine.setData(dData);
             pane.series.push(dLine);
         }
         if (id === 'MACD') {
