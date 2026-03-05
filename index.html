@@ -43,18 +43,17 @@
             </div>
         </div>
         <div class="menu-item">
-            <button id="timeframe-btn" class="nav-btn">5min ▾</button>
+            <button id="timeframe-btn" class="nav-btn">5m</button>
             <div class="dropdown">
-                <div class="ind-row" onclick="setTimeframe('1min')">1min</div>
-                <div class="ind-row" onclick="setTimeframe('5min')">5min</div>
-                <div class="ind-row" onclick="setTimeframe('15min')">15min</div>
+                <div class="ind-row" onclick="setTimeframe('1m')">1m</div>
+                <div class="ind-row" onclick="setTimeframe('5m')">5m</div>
+                <div class="ind-row" onclick="setTimeframe('15')">15m</div>
             </div>
         </div>
         <div class="menu-item">
-            <button id="source-btn" class="nav-btn" style="color: #2196f3;">SOURCE ▾ <div class="dropdown">
-                <div class="ind-row" onclick="setDataSource('none')">● None (Clear)</div>
-                <div class="ind-row" onclick="setDataSource('csv')">● Local CSV Folder</div>
-                <div class="ind-row" onclick="setDataSource('twelvedata')">● Twelve Data API</div>
+            <button id="source-btn" class="nav-btn" style="color: #2196f3;">SOURCE<div class="dropdown">
+                <div class="ind-row" onclick="setDataSource('none')">Clear</div>
+                <div class="ind-row" onclick="setDataSource('twelvedata')">Twelve Data API</div>
             </div>
         </div>
         <div class="menu-item">
