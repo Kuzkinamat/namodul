@@ -157,9 +157,12 @@ window.toggleIndicator = function(id, isChecked) {
             s.setData(sma); mainSeriesRefs[id].push(s);
         }
         if (id === 'BB') {
-            const bb = data.map((d, i) => { if (i < 19) return null; 
-                const sl = data.slice(i-19, i+1).map(x=>x.close), m = sl.reduce((a,b)=>a+b,0)/(sl.reduce)=>a+Math.pow(b-m,2),0)/20);
-                return { time: d.time, t: m + 2*sd, m: m, b: m - 2*sd };
+            const bb = data.map((d, i) => { 
+                if (i < 19) return null; 
+                const sl = data.slice(i-19, i+1).map(x => x.close);
+                const m = sl.reduce((a, b) => a + b, 0) / 20;
+                const sd = Math.sqrt(sl.reduce((a, b) => a + Math.pow(b - m, 2), 0) / 20);
+                return { time: d.time, t: m + 2 * sd, m: m, b: m - 2 * sd };
             }).filter(v => v !== null);
             [{k:'t', c:'rgba(38,166,154,0.3)'}, {k:'m', c:'rgba(33,150,243,0.5)'}, {k:'b', c:'rgba(38,166,154,0.3)'}].forEach(o => {
                 const s = chartMain.addSeries(LightweightCharts.LineSeries, { color: o.c, lineWidth: 1, lastValueVisible: false, priceLineVisible: false });
