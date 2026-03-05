@@ -25,10 +25,9 @@ const chartOpts = {
 
 const chartMain = LightweightCharts.createChart(document.getElementById('chart-main'), chartOpts);
 const candleSeries = chartMain.addSeries(LightweightCharts.CandlestickSeries, { 
-    upColor: '#26a69a', downColor: '#ef5350', lastValueVisible: false, priceLineVisible: false 
-});
+    upColor: '#26a69a', downColor: '#ef5350', lastValueVisible: false, priceLineVisible: false});
 
-window.onresize = () => { 
+windowize => { 
     const container = document.getElementById('main-pane');
     if (!container) return;
     chartMain.resize(container.clientWidth, container.clientHeight); 
@@ -177,9 +176,17 @@ window.toggleIndicator = function(id, isChecked) {
         }
         const pane = activePanes[id];
         pane.series.forEach(s => pane.chart.removeSeries(s)); pane.series = [];
-        if (id === 'RSI') {
-            const s = pane.chart.addSeries(LightweightCharts.LineSeries, { color: '#ff00a6', lineWidth: 1, lastValueVisible: false, priceLineVisible: false });
-            s.setData(calcRSI(data, 14)); pane.series.push(s);
+        if (id === 'Stochastic') {
+            const stochasticData = calcStochastic(data, 14, 3, 3);
+            // Create line for %K
+            const kLine = pane.chart.addSeries(LightweightCharts.LineSeries, { color: '#ff00a6', lineWidth: 1, lastValueVisible: false, priceLineVisible: false });
+            kLine.setData(stochasticData.map(d => ({ time: d.time, value: d.k })));
+            pane.series.push(kLine);
+            
+            // Create line for %D
+            const dLine = pane.chart.addSeries(LightweightCharts.LineSeries, { color: '#2196f3', lineWidth: 1, lastValueVisible: false, priceLineVisible: false });
+            dLine.setData(stochasticData.map(d => ({ time: d.time, value: d.d })));
+            pane.series.push(dLine);
         }
         if (id === 'MACD') {
             const h = pane.chart.addSeries(LightweightCharts.HistogramSeries, { lastValueVisible: false, priceLineVisible: false });

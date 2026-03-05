@@ -51,8 +51,7 @@
             </div>
         </div>
         <div class="menu-item">
-            <button id="source-btn" class="nav-btn" style="color: #2196f3;">SOURCE ▾</button>
-            <div class="dropdown">
+            <button id="source-btn" class="nav-btn" style="color: #2196f3;">SOURCE ▾ <div class="dropdown">
                 <div class="ind-row" onclick="setDataSource('none')">● None (Clear)</div>
                 <div class="ind-row" onclick="setDataSource('csv')">● Local CSV Folder</div>
                 <div class="ind-row" onclick="setDataSource('twelvedata')">● Twelve Data API</div>
@@ -69,7 +68,7 @@
                 <label class="ind-row"><input type="checkbox" data-id="BB" onchange="toggleIndicator('BB', this.checked)"> Bollinger Bands</label>
                 <hr style="border:0; border-top:1px solid #363c4e; margin: 10px 0;">
                 <label class="ind-row"><input type="checkbox" data-id="MACD" onchange="toggleIndicator('MACD', this.checked)"> MACD</label>
-                <label class="ind-row"><input type="checkbox" data-id="RSI" onchange="toggleIndicator('RSI', this.checked)"> RSI</label>
+                <label class="ind-row"><input type="checkbox" data-id="Stochastic" onchange="toggleIndicator('Stochastic', this.checked)"> Stochastic</label>
             </div>
         </div>
         <button class="nav-btn" onclick="changeMarker(-1)">&lt; PREV</button>

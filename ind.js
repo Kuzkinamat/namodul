@@ -24,45 +24,69 @@ function calculateEMA(arr, period) {
 }
 
 /**
- * Calculate Relative Strength Index (RSI)
- * @param {Array} data - Array of objects with {time, close} properties
- * @param {number} period - RSI period (typically 14)
- * @returns {Array} Array of objects with {time, value} properties
+ * Calculate Stochastic Oscillator
+ * @param {Array} data - Array of objects with {time, high, low, close} properties
+ * @param {number} kPeriod - %K period (typically 14)
+ * @param {number} dPeriod - %D period (typically 3)
+ * @param {number} slowing - Slowing period (typically 3)
+ * @returns {Array} Array of objects with {time, k, d} properties
  */
-function calculateRSI(data, period) {
-    if (data.length <= period) return [];
+function calculateStochastic(data, kPeriod = 14, dPeriod = 3, slowing = 3) {
+    if (data.length < kPeriod + slowing - 1) return [];
     
-    let rsiData = [], avgGain0;
+    const stochasticData = [];
     
-    // Calculate initial average gain and loss
-    for (let i = 1; i <= period; i++) {
-        const diff = data[i].close - data[i-1].close;
-        if (diff > 0) avgGain += diff; 
-        else avgLoss -= diff;
+    // Calculate %K values
+    const kValues = [];
+    for (let i = kPeriod - 1; i < data.length; i++) {
+        let lowestLow = data[i].low;
+        let highestHigh = data[i].high;
+        
+        // Find lowest low and highest high in the last kPeriod periods
+        for (let j = i - kPeriod + 1; j <= i; j++) {
+            if (data[j].low < lowestLow) lowestLow = data[j].low;
+            if (data[j].high > highestHigh) highestHigh = data[j].high;
+        }
+        
+        const close = data[i].close;
+        const k = highestHigh - lowestLow === 0 ? 50 : 100 * (close - lowestLow) / (highestHigh - lowestLow);
+        kValues.push({ time: data[i].time, value: k });
     }
     
-    avgGain /= period; 
-    avgLoss /= period;
-    let rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
-    rsiData.push({ time: data[period].time, value: 100 - (100 / (1 + rs)) });
-
-    // Calculate subsequent RSI values
-    for (let i = period + 1; i < data.length; i++) {
-        const diff = data[i].close - data[i-1].close;
-        let gain = diff > 0 ? diff : 0;
-        let loss = diff < 0 ? -diff : 0;
-        
-        avgGain = (avgGain * (period - 1) + gain) / period;
-        avgLoss = (avgLoss * (period - 1) + loss) / period;
-        rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
-        
-        rsiData.push({ time: data[i].time, value: 100 - (100 / (1 + rs)) });
+    // Apply slowing to %K
+    const slowedKValues = [];
+    if (slowing > 1) {
+        for (let i = slowing - 1; i < kValues.length; i++) {
+            let sum = 0;
+            for (let j = i - slowing + 1; j <= i; j++) {
+                sum += kValues[j].value;
+            }
+            const slowedK = sum / slowing;
+            slowedKValues.push({ time: kValues[i].time, value: slowedK });
+        }
+    } else {
+        slowedKValues.push(...kValues);
     }
     
-    return rsiData;
+    // Calculate %D (SMA of slowed %K)
+    for (let i = dPeriod - 1; i < slowedKValues.length; i++) {
+        let sum = 0;
+        for (let j = i - dPeriod + 1; j <= i; j++) {
+            sum += slowedKValues[j].value;
+        }
+        const d = sum / dPeriod;
+        
+        stochasticData.push({
+            time: slowedKValues[i].time,
+            k: slowedKValues[i].value,
+            d: d
+        });
+    }
+    
+    return stochasticData;
 }
 
 // Maintain backward compatibility for existing code in main.js
 // These functions are used by main.js and should be preserved
 const calcEMA = calculateEMA;
-const calcRSI = calculateRSI;
+const calcStochastic = calculateStochastic;
