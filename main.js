@@ -3,7 +3,7 @@
 const SCALE_WIDTH = 80;
 let data = [];
 let MARKER_TIMESTAMPS = [];
-let currentRange = '1M', currentTimeframe = '1min', currentSource = 'none', curM = 0, isSyncing = false;
+let currentRange = '1W', currentTimeframe = '1m', currentSource = 'none', curM = 0, isSyncing = false;
 const activePanes = {}, mainSeriesRefs = {};
 
 const addLog = (m) => { 
@@ -12,6 +12,54 @@ const addLog = (m) => {
         c.innerHTML += `<div><span style=\"color:#5d606b\">[${new Date().toLocaleTimeString()}]</span> ${m}</div>`; 
         c.scrollTop = c.scrollHeight; 
     } 
+};
+// Data utilities for range/timeframe calculations
+window.DataUtils = {
+    // Minutes in each range (assuming 24h days, 7 days week, 30 days month, 365 days year)
+    RANGE_MINUTES: {
+        '1D': 24 * 60,          // 1440
+        '1W': 7 * 24 * 60,      // 10080
+        '1M': 30 * 24 * 60,     // 43200
+        '1Y': 365 * 24 * 60     // 525600
+    },
+    // Minutes in each timeframe (short format)
+    TIMEFRAME_MINUTES: {
+        '1m': 1,
+        '5m': 5,
+        '15m': 15,
+        '1H': 60,
+        '4H': 4 * 60,           // 240
+        '1D': 24 * 60,          // 1440
+        '1W': 7 * 24 * 60,      // 10080
+        '1M': 30 * 24 * 60      // 43200
+    },
+    // Calculate number of candles needed for given range and timeframe
+    calculateOutputSize: function(range, timeframe) {
+        const rangeMinutes = this.RANGE_MINUTES[range];
+        const timeframeMinutes = this.TIMEFRAME_MINUTES[timeframe];
+        if (!rangeMinutes || !timeframeMinutes) {
+            console.warn(`Unknown range or timeframe: ${range}, ${timeframe}`);
+            return 100; // fallback
+        }
+        const candles = Math.ceil(rangeMinutes / timeframeMinutes);
+        // Limit to API maximum (5000 for Twelve Data free plan)
+        const MAX_OUTPUTSIZE = 5000;
+        return Math.min(candles, MAX_OUTPUTSIZE);
+    },
+    // Map timeframe to Twelve Data interval string (convert short format to API format)
+    mapTimeframeToInterval: function(timeframe) {
+        const intervalMap = {
+            '1m': '1min',
+            '5m': '5min',
+            '15m': '15min',
+            '1H': '1h',
+            '4H': '4h',
+            '1D': '1day',
+            '1W': '1week',
+            '1M': '1month'
+        };
+        return intervalMap[timeframe] || '1day';
+    }
 };
 
 // Chart configuration
@@ -73,8 +121,6 @@ window.setDataSource = async (type) => {
         Object.keys(activePanes).forEach(id => { activePanes[id].chart.remove(); document.getElementById(`wrapper-${id}`)?.remove(); delete activePanes[id]; });
         document.querySelectorAll('#indicator-menu input[type=\"checkbox\"]').forEach(cb => cb.checked = false);
         addLog("Source cleared.");
-    } else if (type === 'csv' && window.CsvProvider) {
-        if (await window.CsvProvider.requestAccess()) renderPairs(await window.CsvProvider.scanFiles());
     } else if (type === 'twelvedata' && window.TwelveDataProvider) {
         addLog("Initializing Twelve Data API connection...");
         if (await window.TwelveDataProvider.requestAccess()) {
@@ -85,24 +131,17 @@ window.setDataSource = async (type) => {
 };
 
 window.setPair = async (p) => { 
-    document.getElementById('pair-btn').innerText = p + ' ▾'; 
-    const provider = (currentSource === 'csv') ? window.CsvProvider :
-                     (currentSource === 'twelvedata') ? window.TwelveDataProvider : null;
+    document.getElementById('pair-btn').innerText = p + ' ▾';
+    const provider = (currentSource === 'twelvedata') ? window.TwelveDataProvider : null;
     if (provider) {
-        // Combine range and timeframe for data fetching
-        const combinedRange = currentTimeframe === '1min' ? '1min' :
-                             currentTimeframe === '5min' ? '5min' :
-                             currentTimeframe === '15min' ? '15min' :
-                             currentRange;
-        
         addLog(`Fetching data: ${p}, Range: ${currentRange}, Timeframe: ${currentTimeframe}`);
-        const newData = await provider.fetchData(combinedRange, p);
+        const newData = await provider.fetchData(currentRange, currentTimeframe, p);
         if (!newData || !newData.length) return addLog("No data received");
         data = newData;
         candleSeries.setData(data);
         chartMain.timeScale().fitContent();
-        document.querySelectorAll('#indicator-menu input[type=\"checkbox\"]').forEach(cb => { 
-            if(cb.checked) window.toggleIndicator(cb.getAttribute('data-id'), true); 
+        document.querySelectorAll('#indicator-menu input[type=\"checkbox\"]').forEach(cb => {
+            if(cb.checked) window.toggleIndicator(cb.getAttribute('data-id'), true);
         });
         updatePopbar();
         addLog(`Loaded ${p}: ${data.length} candles (Range: ${currentRange}, TF: ${currentTimeframe})`);

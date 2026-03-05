@@ -78,35 +78,29 @@ window.TwelveDataProvider = {
 
     /**
      * Fetch OHLC data from Twelve Data API
-     * @param {string} range - Time range (1min, 5min, 15min, 1D, 1W, 1M, 1Y)
+     * @param {string} range - Time range (1D, 1W, 1M, 1Y)
+     * @param {string} timeframe - Candle timeframe (1min, 5min, 15min, 1H, 4H, 1D, 1W, 1M)
      * @param {string} pair - Trading pair (e.g., EUR/USD)
      */
-    fetchData: async function(range, pair) {
+    fetchData: async function(range, timeframe, pair) {
+        // Backward compatibility: if only two arguments provided, treat as old signature (range, pair)
+        if (arguments.length === 2) {
+            pair = timeframe;
+            timeframe = range; // In old signature, range actually combined range/timeframe
+            range = '1W'; // default range (should be derived from currentRange but we don't have it)
+            console.warn('Deprecated fetchData call, please update to provide range and timeframe separately');
+        }
+        
         try {
-            addLog(`Fetching ${pair} data (${range})...`);
+            addLog(`Fetching ${pair} data (Range: ${range}, Timeframe: ${timeframe})...`);
             
-            // Map range to Twelve Data interval
-            const intervalMap = {
-                '1min': '1min',
-                '5min': '5min',
-                '15min': '15min',
-                '1D': '1day',
-                '1W': '1week',
-                '1M': '1month',
-                '1Y': '1year'
-            };
+            // Use DataUtils for interval mapping and outputsize calculation
+            if (!window.DataUtils) {
+                throw new Error('DataUtils not loaded');
+            }
             
-            const interval = intervalMap[range] || '1day';
-            
-            // Calculate outputsize based on range
-            let outputsize = 100; // Default
-            if (range === '1min') outputsize = 1440; // 24 hours * 60 minutes
-            if (range === '5min') outputsize = 288;  // 24 hours * 12 (5-min candles)
-            if (range === '15min') outputsize = 96;  // 24 hours * 4 (15-min candles)
-            if (range === '1D') outputsize = 365;    // 1 year daily
-            if (range === '1W') outputsize = 104;    // 2 years weekly
-            if (range === '1M') outputsize = 60;     // 5 years monthly
-            if (range === '1Y') outputsize = 20;     // 20 years yearly
+            const interval = window.DataUtils.mapTimeframeToInterval(timeframe);
+            const outputsize = window.DataUtils.calculateOutputSize(range, timeframe);
             
             // Build API URL
             const url = `${this.baseUrl}/time_series?symbol=${encodeURIComponent(pair)}&interval=${interval}&apikey=${this.apiKey}&outputsize=${outputsize}&format=JSON`;
@@ -130,6 +124,11 @@ window.TwelveDataProvider = {
             
             if (data.code === 429) {
                 throw new Error('API rate limit reached');
+            }
+            
+            // Additional error checks
+            if (data.code && data.code >= 400) {
+                throw new Error(data.message || `API error ${data.code}`);
             }
             
             // Parse response

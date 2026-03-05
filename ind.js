@@ -1,13 +1,113 @@
-// Indicator calculation utilities
-// Optimized version - removed unused functions and duplicates
+
+function calculateSMA(data, period) {
+    if (!data || !data.length || data.length < period) {
+        return data.map(d => ({ time: d.time, value: null }));
+    }
+    
+    const sma = [];
+    for (let i = 0; i < data.length; i++) {
+        if (i < period - 1) {
+            sma.push({ time: data[i].time, value: null });
+        } else {
+            let sum = 0;
+            for (let j = i - period + 1; j <= i; j++) {
+                const value = data[j].close !== undefined ? data[j].close : data[j].value;
+                sum += value;
+            }
+            sma.push({ time: data[i].time, value: sum / period });
+        }
+    }
+    return sma;
+}
+
+function calculateBollingerBands(data, period = 20, stdDev = 2) {
+    if (!data || !data.length || data.length < period) {
+        return data.map(d => ({ time: d.time, upper: null, middle: null, lower: null }));
+    }
+    
+    const bb = [];
+    for (let i = 0; i < data.length; i++) {
+        if (i < period - 1) {
+            bb.push({ time: data[i].time, upper: null, middle: null, lower: null });
+        } else {
+            const slice = data.slice(i - period + 1, i + 1);
+            const values = slice.map(d => d.close);
+            const mean = values.reduce((sum, val) => sum + val, 0) / period;
+            const variance = values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / period;
+            const std = Math.sqrt(variance);
+            
+            bb.push({
+                time: data[i].time,
+                upper: mean + stdDev * std,
+                middle: mean,
+                lower: mean - stdDev * std
+            });
+        }
+    }
+    return bb;
+}
+
+function calculateMACD(data, fastPeriod = 12, slowPeriod = 26, signalPeriod = 9) {
+    if (!data || !data.length) return [];
+    
+    // Calculate EMAs
+    const fastEMA = calculateEMA(data, fastPeriod);
+    const slowEMA = calculateEMA(data, slowPeriod);
+    
+    // Calculate MACD line (fast EMA - slow EMA)
+    const macdLine = [];
+    for (let i = 0; i < data.length; i++) {
+        if (fastEMA[i] && slowEMA[i]) {
+            macdLine.push({
+                time: data[i].time,
+                value: fastEMA[i].value - slowEMA[i].value
+            });
+        } else {
+            macdLine.push({ time: data[i].time, value: null });
+        }
+    }
+    
+    // Calculate Signal line (EMA of MACD line)
+    const signalLine = calculateEMA(macdLine, signalPeriod);
+    
+    // Calculate Histogram (MACD - Signal)
+    const histogram = [];
+    for (let i = 0; i < data.length; i++) {
+        const macdVal = macdLine[i]?.value;
+        const signalVal = signalLine[i]?.value;
+        
+        if (macdVal !== null && signalVal !== null) {
+            histogram.push({
+                time: data[i].time,
+                value: macdVal - signalVal,
+                color: (macdVal - signalVal) >= 0 ? '#26a69a' : '#ef5350'
+            });
+        } else {
+            histogram.push({ time: data[i].time, value: null, color: null });
+        }
+    }
+    
+    // Combine results
+    const result = [];
+    for (let i = 0; i < data.length; i++) {
+        result.push({
+            time: data[i].time,
+            macd: macdLine[i]?.value,
+            signal: signalLine[i]?.value,
+            histogram: histogram[i]?.value,
+            histogramColor: histogram[i]?.color
+        });
+    }
+    
+    return result;
+}
 
 /**
- * Calculate Exponential Moving Average (EMA)
- * @param {Array} arr - Array of objects with {time, close} or {time, value} properties
- * @param {number} period - EMA period
- * @returns {Array} Array of objects with {time, value} properties
+ * Calculate Exponential Moving Average (EMA) - re-export from ind.js
+ * This function is already defined in ind.js, but we re-export it here for compatibility
  */
 function calculateEMA(arr, period) {
+    // This function is defined in ind.js, but we provide a fallback implementation
     if (!arr || !arr.length) return [];
     const k = 2 / (period + 1);
     let ema = [];
@@ -24,14 +124,11 @@ function calculateEMA(arr, period) {
 }
 
 /**
- * Calculate Stochastic Oscillator
- * @param {Array} data - Array of objects with {time, high, low, close} properties
- * @param {number} kPeriod - %K period (typically 14)
- * @param {number} dPeriod - %D period (typically 3)
- * @param {number} slowing - Slowing period (typically 3)
- * @returns {Array} Array of objects with {time, k, d} properties (k and d can be null for insufficient data)
+ * Calculate Stochastic Oscillator - re-export from ind.js
+ * This function is already defined in ind.js, but we re-export it here for compatibility
  */
 function calculateStochastic(data, kPeriod = 14, dPeriod = 3, slowing = 3) {
+    // This function is defined in ind.js, but we provide a fallback implementation
     if (data.length < kPeriod) return data.map(d => ({ time: d.time, k: null, d: null }));
     
     const stochasticData = [];
@@ -106,7 +203,9 @@ function calculateStochastic(data, kPeriod = 14, dPeriod = 3, slowing = 3) {
     return stochasticData;
 }
 
-// Maintain backward compatibility for existing code in main.js
-// These functions are used by main.js and should be preserved
-const calcEMA = calculateEMA;
-const calcStochastic = calculateStochastic;
+// Export functions for global use
+window.calcSMA = calculateSMA;
+window.calcBB = calculateBollingerBands;
+window.calcMACD = calculateMACD;
+window.calcEMA = calculateEMA;
+window.calcStochastic = calculateStochastic;
