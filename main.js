@@ -28,10 +28,6 @@ window.DataUtils = {
         '5m': 5,
         '15m': 15,
         '1H': 60,
-        '4H': 4 * 60,           // 240
-        '1D': 24 * 60,          // 1440
-        '1W': 7 * 24 * 60,      // 10080
-        '1M': 30 * 24 * 60      // 43200
     },
     // Calculate number of candles needed for given range and timeframe
     calculateOutputSize: function(range, timeframe) {
@@ -164,21 +160,39 @@ function updatePopbar() {
     }
 }
 
+/**
+ * Синхронизирует видимый логический диапазон всех графиков (основного и индикаторных панелей).
+ * Использует логические диапазоны (getVisibleLogicalRange / setVisibleLogicalRange) для точного совмещения
+ * свечей и индикаторов, что предотвращает визуальное смещение.
+ * Важно: чтобы синхронизация работала корректно, массивы данных индикаторов должны иметь ту же длину,
+ * что и основной массив свечей, и сохранять соответствие по времени. Для периодов, где индикатор не определён,
+ * следует передавать значение null (а не фильтровать элементы), иначе логические индексы разойдутся.
+ */
 function syncAll(source) {
-    if (isSyncing) return; 
+    if (isSyncing) return;
     isSyncing = true;
     const range = source.timeScale().getVisibleLogicalRange();
     if (range) {
-        [chartMain, ...Object.values(activePanes).map(p => p.chart)].forEach(c => { 
-            if (c && c !== source) c.timeScale().setVisibleLogicalRange(range); 
+        [chartMain, ...Object.values(activePanes).map(p => p.chart)].forEach(c => {
+            if (c && c !== source) c.timeScale().setVisibleLogicalRange(range);
         });
     }
-    updatePopbar(); 
+    updatePopbar();
     isSyncing = false;
 }
 
 chartMain.timeScale().subscribeVisibleLogicalRangeChange(() => syncAll(chartMain));
 
+/**
+ * Включает/выключает индикатор на графике.
+ * Для индикаторов, отображаемых в отдельных панелях (Stochastic, MACD), создаёт отдельный чарт.
+ * Для индикаторов на основном графике (SMA, BB) добавляет series поверх свечей.
+ *
+ * Важное замечание: чтобы синхронизация логических диапазонов работала правильно,
+ * массивы данных индикаторов должны сохранять ту же длину и порядок, что и основной массив свечей.
+ * Поэтому для периодов, где индикатор не определён, передаётся значение null (не фильтруется).
+ * Это гарантирует, что логические индексы в syncAll остаются согласованными.
+ */
 window.toggleIndicator = function(id, isChecked) {
     if (!isChecked) {
         if (mainSeriesRefs[id]) { mainSeriesRefs[id].forEach(s => chartMain.removeSeries(s)); delete mainSeriesRefs[id]; }
@@ -192,23 +206,29 @@ window.toggleIndicator = function(id, isChecked) {
         mainSeriesRefs[id] = [];
         if (id === 'SMA') {
             const s = chartMain.addSeries(LightweightCharts.LineSeries, { color: '#ff00a6', lineWidth: 1, lastValueVisible: false, priceLineVisible: false });
-            const sma = data.map((d, i) => i < 19 ? null : { time: d.time, value: data.slice(i-19, i+1).reduce((a,b)=>a+b.close, 0)/20 }).filter(v => v !== null);
+            const sma = data.map((d, i) => i < 19 ? { time: d.time, value: null } : { time: d.time, value: data.slice(i-19, i+1).reduce((a,b)=>a+b.close, 0)/20 });
             s.setData(sma); mainSeriesRefs[id].push(s);
         }
         if (id === 'BB') {
-            const bb = data.map((d, i) => { 
-                if (i < 19) return null; 
+            const bb = data.map((d, i) => {
+                if (i < 19) return { time: d.time, t: null, m: null, b: null };
                 const sl = data.slice(i-19, i+1).map(x => x.close);
                 const m = sl.reduce((a, b) => a + b, 0) / 20;
                 const sd = Math.sqrt(sl.reduce((a, b) => a + Math.pow(b - m, 2), 0) / 20);
                 return { time: d.time, t: m + 2 * sd, m: m, b: m - 2 * sd };
-            }).filter(v => v !== null);
+            });
             [{k:'t', c:'rgba(38,166,154,0.3)'}, {k:'m', c:'rgba(33,150,243,0.5)'}, {k:'b', c:'rgba(38,166,154,0.3)'}].forEach(o => {
                 const s = chartMain.addSeries(LightweightCharts.LineSeries, { color: o.c, lineWidth: 1, lastValueVisible: false, priceLineVisible: false });
                 s.setData(bb.map(v => ({ time: v.time, value: v[o.k] }))); mainSeriesRefs[id].push(s);
             });
         }
     } else {
+        // Log main data info for debugging
+        if (data.length > 0) {
+            addLog(`Main data length: ${data.length}`);
+            addLog(`First candle time: ${new Date(data[0].time * 1000).toISOString()}`);
+            addLog(`Last candle time: ${new Date(data[data.length - 1].time * 1000).toISOString()}`);
+        }
         if (!activePanes[id]) {
             const wr = document.createElement('div'); wr.id = `wrapper-${id}`; wr.className = 'pane-wrapper sub-pane'; wr.innerHTML = `<div class=\"v-line\"></div><div id=\"chart-${id}\" class=\"chart-container\"></div>`;
             document.getElementById('panels-container').appendChild(wr);
@@ -220,15 +240,31 @@ window.toggleIndicator = function(id, isChecked) {
         pane.series.forEach(s => pane.chart.removeSeries(s)); pane.series = [];
         if (id === 'Stochastic') {
             const stochasticData = calcStochastic(data, 14, 3, 3);
-            // Create line for %K - filter out null values
+            // Logging for debugging
+            addLog(`Stochastic data length: ${stochasticData.length}`);
+            // Log first 5 elements
+            for (let idx = 0; idx < Math.min(5, stochasticData.length); idx++) {
+                const d = stochasticData[idx];
+                addLog(`Stochastic[${idx}]: time=${new Date(d.time * 1000).toISOString()}, k=${d.k}, d=${d.d}`);
+            }
+            const nonNullK = stochasticData.filter(d => d.k !== null).length;
+            const nonNullD = stochasticData.filter(d => d.d !== null).length;
+            addLog(`Non-null K: ${nonNullK}, D: ${nonNullD}`);
+            if (nonNullK > 0) {
+                const firstK = stochasticData.find(d => d.k !== null);
+                const lastK = stochasticData.slice().reverse().find(d => d.k !== null);
+                addLog(`First K time: ${new Date(firstK.time * 1000).toISOString()}, value: ${firstK.k.toFixed(2)}`);
+                addLog(`Last K time: ${new Date(lastK.time * 1000).toISOString()}, value: ${lastK.k.toFixed(2)}`);
+            }
+            // Create line for %K - keep null values
             const kLine = pane.chart.addSeries(LightweightCharts.LineSeries, { color: '#ff00a6', lineWidth: 1, lastValueVisible: false, priceLineVisible: false });
-            const kData = stochasticData.map(d => d.k === null ? null : { time: d.time, value: d.k }).filter(v => v !== null);
+            const kData = stochasticData.map(d => ({ time: d.time, value: d.k }));
             kLine.setData(kData);
             pane.series.push(kLine);
             
-            // Create line for %D - filter out null values
+            // Create line for %D - keep null values
             const dLine = pane.chart.addSeries(LightweightCharts.LineSeries, { color: '#2196f3', lineWidth: 1, lastValueVisible: false, priceLineVisible: false });
-            const dData = stochasticData.map(d => d.d === null ? null : { time: d.time, value: d.d }).filter(v => v !== null);
+            const dData = stochasticData.map(d => ({ time: d.time, value: d.d }));
             dLine.setData(dData);
             pane.series.push(dLine);
         }
