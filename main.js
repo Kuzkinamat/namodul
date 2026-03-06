@@ -2,17 +2,21 @@
 
 const SCALE_WIDTH = 80;
 let data = [];
+window.data = data; // expose globally
 let MARKER_TIMESTAMPS = [];
+window.MARKER_TIMESTAMPS = MARKER_TIMESTAMPS; // экспорт для strategy.js
 let currentRange = '1W', currentTimeframe = '1m', currentSource = 'none', curM = 0, isSyncing = false;
+window.curM = curM; // экспорт для strategy.js
 const activePanes = {}, mainSeriesRefs = {};
 
-const addLog = (m) => { 
-    const c = document.getElementById('log-content'); 
-    if (c) { 
-        c.innerHTML += `<div><span style=\"color:#5d606b\">[${new Date().toLocaleTimeString()}]</span> ${m}</div>`; 
-        c.scrollTop = c.scrollHeight; 
-    } 
+const addLog = (m) => {
+    const c = document.getElementById('log-content');
+    if (c) {
+        c.innerHTML += `<div><span style=\"color:#5d606b\">[${new Date().toLocaleTimeString()}]</span> ${m}</div>`;
+        c.scrollTop = c.scrollHeight;
+    }
 };
+window.addLog = addLog;
 // Data utilities for range/timeframe calculations
 window.DataUtils = {
     // Minutes in each range (assuming 24h days, 7 days week, 30 days month, 365 days year)
@@ -68,8 +72,10 @@ const chartOpts = {
 };
 
 const chartMain = LightweightCharts.createChart(document.getElementById('chart-main'), chartOpts);
-const candleSeries = chartMain.addSeries(LightweightCharts.CandlestickSeries, { 
+window.chartMain = chartMain;
+const candleSeries = chartMain.addSeries(LightweightCharts.CandlestickSeries, {
     upColor: '#26a69a', downColor: '#ef5350', lastValueVisible: false, priceLineVisible: false});
+window.candleSeries = candleSeries;
 
 window.onresize = () => { 
     const container = document.getElementById('main-pane');
@@ -112,7 +118,7 @@ window.setDataSource = async (type) => {
     currentSource = type; 
     document.getElementById('source-btn').innerText = (type === 'none' ? 'SOURCE' : type.toUpperCase()) + ' ▾';
     if (type === 'none') {
-        data = []; candleSeries.setData([]);
+        data = []; window.data = data; candleSeries.setData([]);
         Object.keys(mainSeriesRefs).forEach(id => { mainSeriesRefs[id].forEach(s => chartMain.removeSeries(s)); delete mainSeriesRefs[id]; });
         Object.keys(activePanes).forEach(id => { activePanes[id].chart.remove(); document.getElementById(`wrapper-${id}`)?.remove(); delete activePanes[id]; });
         document.querySelectorAll('#indicator-menu input[type=\"checkbox\"]').forEach(cb => cb.checked = false);
@@ -126,7 +132,7 @@ window.setDataSource = async (type) => {
     window.onresize(); 
 };
 
-window.setPair = async (p) => { 
+window.setPair = async (p) => {
     document.getElementById('pair-btn').innerText = p + ' ▾';
     const provider = (currentSource === 'twelvedata') ? window.TwelveDataProvider : null;
     if (provider) {
@@ -134,8 +140,22 @@ window.setPair = async (p) => {
         const newData = await provider.fetchData(currentRange, currentTimeframe, p);
         if (!newData || !newData.length) return addLog("No data received");
         data = newData;
+        window.data = data;
         candleSeries.setData(data);
         chartMain.timeScale().fitContent();
+        // Очистить маркеры сигналов
+        if (window.Strategy && window.chartMain && window.candleSeries) {
+            window.Strategy.clearSignals(window.chartMain, window.candleSeries);
+        }
+        // Сбросить сигналы
+        window.lastSignals = [];
+        // Очистить массив временных меток маркеров
+        MARKER_TIMESTAMPS = [];
+        curM = 0;
+        // Обновить график баланса, если он активен
+        if (activePanes.Balance && typeof window.updateBalance === 'function') {
+            window.updateBalance();
+        }
         document.querySelectorAll('#indicator-menu input[type=\"checkbox\"]').forEach(cb => {
             if(cb.checked) window.toggleIndicator(cb.getAttribute('data-id'), true);
         });
@@ -282,14 +302,103 @@ window.toggleIndicator = function(id, isChecked) {
     }
 };
 
-window.changeMarker = (dir) => { 
-    if (MARKER_TIMESTAMPS.length) { 
-        curM = (curM + dir + MARKER_TIMESTAMPS.length) % MARKER_TIMESTAMPS.length; 
+window.changeMarker = (dir) => {
+    if (MARKER_TIMESTAMPS.length) {
+        curM = (curM + dir + MARKER_TIMESTAMPS.length) % MARKER_TIMESTAMPS.length;
         const ts = MARKER_TIMESTAMPS[curM];
-        chartMain.timeScale().setVisibleRange({ from: ts - 3600, to: ts + 3600 }); 
-    } 
+        chartMain.timeScale().setVisibleRange({ from: ts - 3600, to: ts + 3600 });
+    }
+};
+
+// Включение/выключение графика баланса
+window.toggleBalance = function(isChecked) {
+    if (!isChecked) {
+        // Удалить панель Balance
+        if (activePanes.Balance) {
+            activePanes.Balance.chart.remove();
+            document.getElementById('wrapper-Balance')?.remove();
+            delete activePanes.Balance;
+            window.onresize();
+            addLog('График баланса скрыт');
+        }
+        return;
+    }
+    if (!data.length) {
+        addLog('Нет данных для расчета баланса');
+        return;
+    }
+    // Рассчитать PnL (если сигналов нет, будет отображен постоянный баланс)
+    const balanceData = window.Strategy.calculatePnL(data, window.lastSignals || [], 100, 1, 0.8);
+    if (!balanceData || balanceData.length === 0) {
+        addLog('Не удалось рассчитать баланс');
+        return;
+    }
+    // Создать панель для Balance, если её нет
+    if (!activePanes.Balance) {
+        const wr = document.createElement('div');
+        wr.id = 'wrapper-Balance';
+        wr.className = 'pane-wrapper sub-pane';
+        wr.innerHTML = `<div class="v-line"></div><div id="chart-Balance" class="chart-container"></div>`;
+        document.getElementById('panels-container').appendChild(wr);
+        const chart = LightweightCharts.createChart(document.getElementById('chart-Balance'), {
+            layout: { background: { color: '#131722' }, textColor: '#d1d4dc' },
+            rightPriceScale: { borderColor: '#363c4e', minimumWidth: 80 },
+            grid: { vertLines: { visible: false }, horzLines: { color: '#242733' } },
+            crosshair: { mode: LightweightCharts.CrosshairMode.Hidden },
+            timeScale: { visible: false }
+        });
+        chart.timeScale().subscribeVisibleLogicalRangeChange(() => syncAll(chart));
+        activePanes.Balance = { chart, series: [] };
+    }
+    const pane = activePanes.Balance;
+    pane.series.forEach(s => pane.chart.removeSeries(s));
+    pane.series = [];
+    const series = pane.chart.addSeries(LightweightCharts.LineSeries, {
+        color: '#00ff00',
+        lineWidth: 2,
+        lastValueVisible: false,
+        priceLineVisible: false
+    });
+    series.setData(balanceData);
+    pane.series.push(series);
+    pane.chart.timeScale().fitContent();
+    window.onresize();
+    syncAll(chartMain);
+    addLog('График баланса отображен');
+};
+
+// Обновить график баланса (если активен) на основе текущих сигналов
+window.updateBalance = function() {
+    if (!activePanes.Balance) {
+        // График баланса не активен
+        return;
+    }
+    if (!data.length) {
+        addLog('Нет данных для обновления баланса');
+        return;
+    }
+    // Рассчитать PnL (если сигналов нет, будет отображен постоянный баланс)
+    const balanceData = window.Strategy.calculatePnL(data, window.lastSignals || [], 100, 1, 0.8);
+    if (!balanceData || balanceData.length === 0) {
+        addLog('Не удалось рассчитать баланс');
+        return;
+    }
+    const pane = activePanes.Balance;
+    pane.series.forEach(s => pane.chart.removeSeries(s));
+    pane.series = [];
+    const series = pane.chart.addSeries(LightweightCharts.LineSeries, {
+        color: '#00ff00',
+        lineWidth: 2,
+        lastValueVisible: false,
+        priceLineVisible: false
+    });
+    series.setData(balanceData);
+    pane.series.push(series);
+    pane.chart.timeScale().fitContent();
+    syncAll(chartMain);
+    addLog('График баланса обновлен');
 };
 
 // Initialize with default values
-window.onresize(); 
+window.onresize();
 window.setDataSource('none');
