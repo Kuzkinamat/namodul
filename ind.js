@@ -1,3 +1,19 @@
+function calculateEMA(arr, period) {
+    // This function is defined in ind.js, but we provide a fallback implementation
+    if (!arr || !arr.length) return [];
+    const k = 2 / (period + 1);
+    let ema = [];
+    let prev = (arr[0].close !== undefined) ? arr[0].close : arr[0].value;
+    
+    arr.forEach((d, i) => {
+        let val = (d.close !== undefined) ? d.close : d.value;
+        let v = (i === 0) ? prev : (val - prev) * k + prev;
+        ema.push({ time: d.time, value: v });
+        prev = v;
+    });
+    
+    return ema;
+}
 
 function calculateSMA(data, period) {
     if (!data || !data.length || data.length < period) {
@@ -20,34 +36,7 @@ function calculateSMA(data, period) {
     return sma;
 }
 
-function calculateBollingerBands(data, period = 20, stdDev = 2) {
-    if (!data || !data.length || data.length < period) {
-        return data.map(d => ({ time: d.time, upper: null, middle: null, lower: null }));
-    }
-    
-    const bb = [];
-    for (let i = 0; i < data.length; i++) {
-        if (i < period - 1) {
-            bb.push({ time: data[i].time, upper: null, middle: null, lower: null });
-        } else {
-            const slice = data.slice(i - period + 1, i + 1);
-            const values = slice.map(d => d.close);
-            const mean = values.reduce((sum, val) => sum + val, 0) / period;
-            const variance = values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / period;
-            const std = Math.sqrt(variance);
-            
-            bb.push({
-                time: data[i].time,
-                upper: mean + stdDev * std,
-                middle: mean,
-                lower: mean - stdDev * std
-            });
-        }
-    }
-    return bb;
-}
-
-function calculateMACD(data, fastPeriod = 12, slowPeriod = 26, signalPeriod = 9) {
+function calculateMACD(data, fastPeriod = 5, slowPeriod = 34, signalPeriod = 5) {
     if (!data || !data.length) return [];
     
     // Calculate EMAs
@@ -103,31 +92,10 @@ function calculateMACD(data, fastPeriod = 12, slowPeriod = 26, signalPeriod = 9)
 }
 
 /**
- * Calculate Exponential Moving Average (EMA) - re-export from ind.js
- * This function is already defined in ind.js, but we re-export it here for compatibility
- */
-function calculateEMA(arr, period) {
-    // This function is defined in ind.js, but we provide a fallback implementation
-    if (!arr || !arr.length) return [];
-    const k = 2 / (period + 1);
-    let ema = [];
-    let prev = (arr[0].close !== undefined) ? arr[0].close : arr[0].value;
-    
-    arr.forEach((d, i) => {
-        let val = (d.close !== undefined) ? d.close : d.value;
-        let v = (i === 0) ? prev : (val - prev) * k + prev;
-        ema.push({ time: d.time, value: v });
-        prev = v;
-    });
-    
-    return ema;
-}
-
-/**
  * Calculate Stochastic Oscillator - re-export from ind.js
  * This function is already defined in ind.js, but we re-export it here for compatibility
  */
-function calculateStochastic(data, kPeriod = 14, dPeriod = 3, slowing = 3) {
+function calculateStochastic(data, kPeriod = 5, dPeriod = 3, slowing = 3) {
     // This function is defined in ind.js, but we provide a fallback implementation
     if (data.length < kPeriod) return data.map(d => ({ time: d.time, k: null, d: null }));
     
@@ -201,6 +169,33 @@ function calculateStochastic(data, kPeriod = 14, dPeriod = 3, slowing = 3) {
     }
     
     return stochasticData;
+}
+
+function calculateBollingerBands(data, period = 20, stdDev = 2) {
+    if (!data || !data.length || data.length < period) {
+        return data.map(d => ({ time: d.time, upper: null, middle: null, lower: null }));
+    }
+    
+    const bb = [];
+    for (let i = 0; i < data.length; i++) {
+        if (i < period - 1) {
+            bb.push({ time: data[i].time, upper: null, middle: null, lower: null });
+        } else {
+            const slice = data.slice(i - period + 1, i + 1);
+            const values = slice.map(d => d.close);
+            const mean = values.reduce((sum, val) => sum + val, 0) / period;
+            const variance = values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / period;
+            const std = Math.sqrt(variance);
+            
+            bb.push({
+                time: data[i].time,
+                upper: mean + stdDev * std,
+                middle: mean,
+                lower: mean - stdDev * std
+            });
+        }
+    }
+    return bb;
 }
 
 // Export functions for global use
