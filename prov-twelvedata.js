@@ -88,7 +88,7 @@ window.TwelveDataProvider = {
             pair = timeframe;
             timeframe = range; // In old signature, range actually combined range/timeframe
             range = '1W'; // default range (should be derived from currentRange but we don't have it)
-            console.warn('Deprecated fetchData call, please update to provide range and timeframe separately');
+            addLog('Предупреждение: устаревший вызов fetchData, обновите код для передачи range и timeframe отдельно');
         }
         
         try {

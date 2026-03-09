@@ -1,7 +1,8 @@
+
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <title>Namodul 1.0.1</title>
+    <title>Namodul 0.0.5</title>
     <meta charset="UTF-8">
     <style>
         :root { --ps-width: 80px; --log-height: 200px; }
@@ -13,7 +14,14 @@
         .menu-item:hover .dropdown { display: block; }
         .ind-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; cursor: pointer; font-size: 11px; color: #d1d4dc; }
         .ind-row:hover { color: #2196f3; }
-        .nav-btn { background: #363c4e; border: none; color: #d1d4dc; padding: 6px 12px; cursor: pointer; border-radius: 4px; font-size: 11px; font-weight: bold; margin-right: 8px; }
+        button, .btn {
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            outline: none;
+            font-family: inherit;
+        }
+        .nav-btn { background: #363c4e; color: #d1d4dc; padding: 6px 12px; font-size: 11px; font-weight: bold; margin-right: 8px; }
         .nav-btn:hover { background: #4c5265; }
         #panels-container { flex: 1 1 auto; display: flex; flex-direction: column; overflow: hidden; background: #131722; position: relative; }
         .pane-wrapper { position: relative; width: 100%; border-bottom: 1px solid #363c4e; display: flex; flex-direction: column; }
@@ -29,6 +37,222 @@
         #log-panel.collapsed { height: 30px; }
         #log-header { height: 30px; background: #1e222d; display: flex; align-items: center; padding: 0 15px; font-size: 11px; font-weight: bold; color: #d1d4dc; justify-content: space-between; cursor: pointer; }
         #log-content { flex: 1; overflow-y: auto; padding: 10px; font-family: 'Consolas', monospace; font-size: 11px; color: #b2b5be; line-height: 1.4; }
+        /* Панель настроек */
+        #settings-panel {
+            position: absolute;
+            top: 45px;
+            left: 0;
+            width: 450px;
+            height: calc(100vh - 45px);
+            background: #1e222d;
+            border-right: 1px solid #363c4e;
+            z-index: 1999;
+            overflow-y: auto;
+            padding: 20px;
+            color: #d1d4dc;
+            transform: translateX(-100%);
+            transition: transform 0.3s ease;
+        }
+        #settings-panel.open {
+            transform: translateX(0);
+        }
+        .settings-section {
+            margin-bottom: 25px;
+        }
+        .settings-section h3 {
+            font-size: 14px;
+            margin-bottom: 12px;
+            color: #2196f3;
+            border-bottom: 1px solid #363c4e;
+            padding-bottom: 5px;
+        }
+        .settings-btn {
+            background: #2196f3;
+            color: white;
+            padding: 8px 12px;
+            font-size: 12px;
+            margin-top: 10px;
+            width: 100%;
+        }
+        .settings-btn:hover {
+            background: #0b7dda;
+        }
+        /* Кнопки навигации по маркерам */
+        .marker-nav {
+            display: flex;
+            gap: 5px;
+        }
+        .marker-nav .nav-btn {
+            flex: 1;
+            text-align: center;
+        }
+        /* Вертикальная компоновка настроек */
+        .settings-vertical {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            margin-bottom: 25px;
+        }
+        .settings-vertical .settings-section {
+            background: #131722;
+            border: 1px solid #363c4e;
+            border-radius: 6px;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+        }
+        .settings-vertical .settings-section h4 {
+            margin: 0 0 12px 0;
+            font-size: 13px;
+            color: #2196f3;
+            border-bottom: 1px solid #363c4e;
+            padding-bottom: 5px;
+        }
+        .code-editor {
+            flex: 1;
+            background: #0a0c14;
+            border: 1px solid #363c4e;
+            border-radius: 4px;
+            padding: 10px;
+            font-family: 'Consolas', monospace;
+            font-size: 12px;
+            color: #d1d4dc;
+            resize: vertical;
+            min-height: 120px;
+            white-space: pre;
+            overflow: auto;
+        }
+        .code-editor:focus {
+            outline: none;
+            border-color: #2196f3;
+        }
+    /* Модальное окно настроек индикаторов */
+    .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.7);
+        z-index: 3000;
+        display: none;
+        justify-content: center;
+        align-items: center;
+    }
+    .modal-overlay.open {
+        display: flex;
+    }
+    .modal-content {
+        background: #1e222d;
+        border: 1px solid #363c4e;
+        border-radius: 8px;
+        width: 90%;
+        max-width: 600px;
+        max-height: 80vh;
+        overflow-y: auto;
+        padding: 20px;
+        color: #d1d4dc;
+        display: flex;
+        flex-direction: column;
+    }
+    .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+        border-bottom: 1px solid #363c4e;
+        padding-bottom: 10px;
+    }
+    .modal-header h3 {
+        margin: 0;
+        color: #2196f3;
+        font-size: 16px;
+    }
+    .modal-close {
+        background: none;
+        border: none;
+        color: #d1d4dc;
+        font-size: 20px;
+        cursor: pointer;
+        padding: 0;
+        width: 24px;
+        height: 24px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .modal-close:hover {
+        color: #2196f3;
+    }
+    .params-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+        gap: 12px;
+        margin-bottom: 20px;
+    }
+    .param-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 13px;
+    }
+    .param-row label {
+        flex: 1;
+        margin-right: 10px;
+    }
+    .param-row input[type="number"],
+    .param-row input[type="text"] {
+        width: 80px;
+        background: #131722;
+        border: 1px solid #363c4e;
+        color: #d1d4dc;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+    }
+    .param-row input[type="checkbox"] {
+        margin-right: 8px;
+    }
+    .condition-editor {
+        margin-top: 20px;
+    }
+    .condition-editor textarea {
+        width: 100%;
+        height: 120px;
+        background: #131722;
+        border: 1px solid #363c4e;
+        color: #d1d4dc;
+        padding: 10px;
+        font-family: monospace;
+        font-size: 12px;
+        border-radius: 4px;
+        resize: vertical;
+    }
+    .modal-actions {
+        display: flex;
+        gap: 10px;
+        margin-top: 20px;
+        justify-content: flex-end;
+    }
+    .modal-actions button {
+        padding: 8px 16px;
+        font-size: 13px;
+        font-weight: bold;
+    }
+    .modal-actions .btn-apply {
+        background: #2196f3;
+        color: white;
+    }
+    .modal-actions .btn-apply:hover {
+        background: #0b7dda;
+    }
+    .modal-actions .btn-cancel {
+        background: #363c4e;
+        color: #d1d4dc;
+    }
+    .modal-actions .btn-cancel:hover {
+        background: #4c5265;
+    }
     </style>
 </head>
 <body>
@@ -55,6 +279,7 @@
                 <div class="dropdown">
                 <div class="ind-row" onclick="setDataSource('none')">Clear</div>
                 <div class="ind-row" onclick="setDataSource('twelvedata')">Twelve Data API</div>
+                <div class="ind-row" onclick="setDataSource('local')">Local JS</div>
             </div>
         </div>
         <div class="menu-item">
@@ -64,7 +289,7 @@
         <div id="indicator-menu" class="menu-item">
             <button class="nav-btn">INDICATORS ▾</button>
             <div class="dropdown" onclick="event.stopPropagation()">
-                <label class="ind-row"><input type="checkbox" data-id="SMA" onchange="toggleIndicator('SMA', this.checked)">SMA 20</label>
+                <label class="ind-row"><input type="checkbox" data-id="SMA" onchange="toggleIndicator('SMA', this.checked)">SMA</label>
                 <label class="ind-row"><input type="checkbox" data-id="BB" onchange="toggleIndicator('BB', this.checked)">Bollinger Bands</label>
                 <hr style="border:0; border-top:1px solid #363c4e; margin: 10px 0;">
                 <label class="ind-row"><input type="checkbox" data-id="MACD" onchange="toggleIndicator('MACD', this.checked)">MACD</label>
@@ -74,6 +299,8 @@
         <div class="menu-item">
             <button class="nav-btn">STRATEGY ▾</button>
             <div class="dropdown" onclick="event.stopPropagation()">
+                <div class="ind-row" onclick="toggleSettings()">⚙️ Settings</div>
+                <hr style="border:0; border-top:1px solid #363c4e; margin: 10px 0;">
                 <div class="ind-row" onclick="window.Strategy.testStrategy()">▶ Run Strategy</div>
                 <hr style="border:0; border-top:1px solid #363c4e; margin: 10px 0;">
                 <div class="ind-row" style="font-size:10px; color:#787b86;">Expiration (select one):</div>
@@ -100,20 +327,53 @@
                 </label>
             </div>
         </div>
-        <button class="nav-btn" onclick="changeMarker(-1)">&lt; PREV</button>
-        <button class="nav-btn" onclick="changeMarker(1)">NEXT &gt;</button>
+        <div class="marker-nav">
+            <button class="nav-btn" onclick="navigateToStart()"><<</button>
+            <button class="nav-btn" onclick="changeMarker(-1)"><</button>
+            <button class="nav-btn" onclick="changeMarker(1)">></button>
+            <button class="nav-btn" onclick="navigateToEnd()">>></button>
+        </div>
         <div style="flex-grow: 1;"></div>
-		<button class="nav-btn" onclick="toggleLog()">LOG</button>
+        <button class="nav-btn" onclick="toggleLog()">LOG</button>
+    </div>
+
+    <div id="settings-panel">
+        <div class="settings-vertical">
+            <!-- Кнопки управления -->
+            <div class="settings-section" style="display: flex; gap: 8px; padding: 8px; background: #131722; border-radius: 6px; border: 1px solid #363c4e;">
+                <button class="settings-btn" style="flex: 1; margin-top: 0; padding: 6px 10px; font-size: 11px;" onclick="applyAllSettings()">Apply Settings</button>
+                <button class="settings-btn" style="flex: 1; margin-top: 0; padding: 6px 10px; font-size: 11px; background: #4caf50;" onclick="window.Strategy.testStrategy()">Run Strategy</button>
+            </div>
+            <!-- Условие покупки -->
+            <div class="settings-section">
+                <h4>buy if</h4>
+                <textarea class="code-editor" id="buy-condition" placeholder="// Возвращает true, если условия для покупки выполнены. Пример: macd > 0">macd > 0</textarea>
+            </div>
+            <!-- Условие продажи -->
+            <div class="settings-section">
+                <h4>sell if</h4>
+                <textarea class="code-editor" id="sell-condition" placeholder="// Возвращает true, если условия для продажи выполнены. Пример: macd < 0">macd < 0</textarea>
+            </div>
+            <!-- Настройки индикаторов -->
+            <div class="settings-section">
+                <h4>Параметры индикаторов (JSON):</h4>
+                <textarea class="code-editor" id="indicator-settings" placeholder="// Пример: { sma: { period: 20 }, bb: { period: 20, stdDev: 2 }, macd: { fast: 12, slow: 26, signal: 9 }, stochastic: { k: 14, d: 3, slowing: 3 } }">{
+  "sma": { "period": 20 },
+  "bb": { "period": 20, "stdDev": 2 },
+  "macd": { "fast": 12, "slow": 26, "signal": 9 },
+  "stochastic": { "k": 14, "d": 3, "slowing": 3 }
+}</textarea>
+            </div>
+        </div>
+        <div class="settings-section">
+            <h3>Экспорт данных</h3>
+            <button class="settings-btn" onclick="exportData('csv')">Экспорт данных в CSV</button>
+            <button class="settings-btn" onclick="exportData('json')">Экспорт данных в JSON</button>
+        </div>
     </div>
 
     <div id="panels-container">
         <div id="main-pane" class="pane-wrapper">
-            <div id="popbar">
-                <div class="info-box"><span class="info-label">O</span><span id="val-open" class="info-value">-</span></div>
-                <div class="info-box"><span class="info-label">H</span><span id="val-high" class="info-value">-</span></div>
-                <div class="info-box"><span class="info-label">L</span><span id="val-low" class="info-value">-</span></div>
-                <div class="info-box"><span class="info-label">C</span><span id="val-close" class="info-value">-</span></div>
-            </div>
             <div class="v-line"></div>
             <div id="chart-main" class="chart-container"></div>
         </div>
@@ -123,11 +383,60 @@
         <div id="log-header" onclick="toggleLog()"></div>
         <div id="log-content"></div>
     </div>
+    <!-- Модальное окно настроек индикаторов и стратегии -->
+    <div id="indicator-settings-modal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Настройки индикаторов и стратегии</h3>
+                <button class="modal-close" onclick="closeIndicatorSettings()">×</button>
+            </div>
+            <div class="params-grid" id="params-grid">
+                <!-- Параметры будут заполнены JavaScript -->
+            </div>
+            <div class="condition-editor">
+                <label for="custom-condition">Пользовательское условие (JavaScript):</label>
+                <textarea id="custom-condition" placeholder="Пример: indicator('macd').histogram > 0 && price('close') > indicator('sma').value"></textarea>
+                <div style="margin-top: 10px; display: flex; align-items: center; gap: 10px;">
+                    <select id="function-select" style="flex: 1; background: #131722; border: 1px solid #363c4e; color: #d1d4dc; padding: 6px; border-radius: 4px; font-size: 12px;">
+                        <option value="">-- Выберите функцию или переменную --</option>
+                        <optgroup label="Функции">
+                            <option value="indicator('macd')">indicator('macd')</option>
+                            <option value="indicator('sma')">indicator('sma')</option>
+                            <option value="indicator('bb')">indicator('bb')</option>
+                            <option value="indicator('stochastic')">indicator('stochastic')</option>
+                            <option value="price('close')">price('close')</option>
+                            <option value="price('open')">price('open')</option>
+                            <option value="price('high')">price('high')</option>
+                            <option value="price('low')">price('low')</option>
+                            <option value="dealStats(5)">dealStats(5)</option>
+                        </optgroup>
+                        <optgroup label="Переменные">
+                            <option value="i">i</option>
+                            <option value="data">data</option>
+                            <option value="indicators">indicators</option>
+                            <option value="tradeHistory">tradeHistory</option>
+                        </optgroup>
+                    </select>
+                    <button class="nav-btn" style="font-size: 12px; padding: 6px 12px;" onclick="insertSelectedFunction()">Вставить</button>
+                </div>
+                <div style="margin-top: 10px; display: flex; align-items: center; gap: 10px;">
+                    <button class="nav-btn" style="font-size: 12px; padding: 6px 12px; background: #4caf50;" onclick="testCondition()">Проверить условие</button>
+                    <div id="condition-test-result" style="font-size: 12px; color: #d1d4dc;"></div>
+                </div>
+                <div style="margin-top: 10px; font-size: 11px; color: #787b86;">
+                    Доступные функции: indicator(name, lag), price(type, lag), dealStats(window). Переменные: i, data, indicators, tradeHistory.
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button class="btn-cancel" onclick="closeIndicatorSettings()">Отмена</button>
+                <button class="btn-apply" onclick="applyIndicatorSettingsFromModal()">Применить</button>
+            </div>
+        </div>
+    </div>
     <script src="./lightweight-charts.standalone.production.js"></script>
+    <script src="./EURUSD_M5_data.js"></script>
     <script src="./main.js"></script>
     <script src="./prov-twelvedata.js"></script>
-    <script src="./ind.js"></script>
+    <script src="./strategy-core.js"></script>
     <script src="./strategy.js"></script>
-    
-</body>
-</html>
+    <script src="./ind.js"></script>
