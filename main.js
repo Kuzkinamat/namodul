@@ -5,7 +5,7 @@ let data = [];
 window.data = data; // expose globally
 let MARKER_TIMESTAMPS = [];
 window.MARKER_TIMESTAMPS = MARKER_TIMESTAMPS; // экспорт для strategy.js
-let currentRange = '1W', currentTimeframe = '1m', currentSource = 'none', curM = 0, isSyncing = false;
+let currentRange = '1W', currentTimeframe = '1m', currentSource = 'none', currentPair = '', curM = 0, isSyncing = false;
 window.curM = curM; // экспорт для strategy.js
 const activePanes = {}, mainSeriesRefs = {};
 
@@ -130,18 +130,24 @@ window.LocalCSVProvider = {
     },
 
     /**
-     * Fetch data for a specific pair and timeframe.
-     * Note: range is ignored because local data contains all available history.
+     * Fetch data for a specific pair, timeframe, and range.
+     * Returns the last N candles where N = DataUtils.calculateOutputSize(range, timeframe).
      */
     fetchData: async function(range, timeframe, pair) {
-        addLog(`Loading local data: ${pair}, Timeframe: ${timeframe}`);
+        addLog(`Loading local data: ${pair}, Timeframe: ${timeframe}, Range: ${range}`);
         const datasets = this.scanDataVariables();
         const dataset = datasets.find(d => d.pair === pair && d.timeframe === timeframe);
         if (!dataset) {
             throw new Error(`No local data found for ${pair} (TF: ${timeframe})`);
         }
+        // Calculate how many candles we need based on range and timeframe
+        const outputSize = window.DataUtils.calculateOutputSize(range, timeframe);
+        // Return the last 'outputSize' candles (or all if dataset is smaller)
+        const sliceStart = Math.max(0, dataset.data.length - outputSize);
+        const slicedData = dataset.data.slice(sliceStart);
+        addLog(`Local data sliced: ${dataset.data.length} -> ${slicedData.length} candles (Range: ${range})`);
         // Return a copy to avoid mutation
-        return dataset.data.slice();
+        return slicedData.slice();
     }
 };
 
@@ -172,17 +178,31 @@ window.toggleLog = () => {
     setTimeout(window.onresize, 50); 
 };
 
-window.setRange = (r) => { 
-    currentRange = r; 
-    document.getElementById('range-btn').innerText = r + ' ▾'; 
-    addLog(`Range set to: ${r}`); 
+window.setRange = (r) => {
+    currentRange = r;
+    document.getElementById('range-btn').innerText = r + ' ▾';
+    addLog(`Range set to: ${r}`);
+    reloadDataIfNeeded();
 };
 
-window.setTimeframe = (tf) => { 
-    currentTimeframe = tf; 
-    document.getElementById('timeframe-btn').innerText = tf + ' ▾'; 
-    addLog(`Timeframe set to: ${tf}`); 
+window.setTimeframe = (tf) => {
+    currentTimeframe = tf;
+    // Обновить текст кнопки TF (например, "m1 ▾")
+    const displayMap = { '1m': 'm1', '5m': 'm5', '15m': 'm15' };
+    const display = displayMap[tf] || tf;
+    const tfBtn = document.getElementById('tf-btn');
+    if (tfBtn) tfBtn.innerText = display + ' ▾';
+    addLog(`Timeframe set to: ${tf}`);
+    // Перезагрузить данные, если источник выбран
+    reloadDataIfNeeded();
 };
+
+function reloadDataIfNeeded() {
+    if (currentSource !== 'none' && currentPair) {
+        // Перезагрузить данные с текущими параметрами
+        window.setPair(currentPair);
+    }
+}
 
 function renderPairs(pairs) {
     const drop = document.getElementById('pair-dropdown');
@@ -228,6 +248,7 @@ window.setDataSource = async (type) => {
 };
 
 window.setPair = async (p) => {
+    currentPair = p;
     document.getElementById('pair-btn').innerText = p + ' ▾';
     let provider = null;
     if (currentSource === 'twelvedata') provider = window.TwelveDataProvider;
@@ -571,33 +592,29 @@ window.onresize();
     // Wait a bit for all scripts to load
     await new Promise(resolve => setTimeout(resolve, 100));
     
-    // Check for any local data variable (e.g., EURUSD_M5_data)
-    const localVars = Object.keys(window).filter(k => k.endsWith('_data') && Array.isArray(window[k]));
-    if (localVars.length > 0) {
-        // Use the first dataset
-        const varName = localVars[0];
-        // Extract pair and timeframe from variable name (same logic as LocalCSVProvider)
-        const base = varName.slice(0, -5);
-        let pair = base;
-        let timeframe = '1m';
-        const tfMatch = base.match(/_([MHDW])(\d+)$/);
-        if (tfMatch) {
-            const type = tfMatch[1];
-            const num = parseInt(tfMatch[2]);
-            pair = base.slice(0, -tfMatch[0].length);
-            if (type === 'M') timeframe = num + 'm';
-            else if (type === 'H') timeframe = num + 'H';
-            else if (type === 'D') timeframe = num + 'D';
-            else if (type === 'W') timeframe = num + 'W';
-            else if (type === 'MN') timeframe = num + 'M';
+    // Use LocalCSVProvider to scan available datasets
+    const datasets = window.LocalCSVProvider ? window.LocalCSVProvider.scanDataVariables() : [];
+    let targetPair = 'EUR/USD';
+    let targetDataset = null;
+    
+    // Try to find EUR/USD dataset (any timeframe)
+    for (const ds of datasets) {
+        if (ds.pair === targetPair) {
+            targetDataset = ds;
+            break;
         }
-        if (pair.length === 6 && !pair.includes('/')) {
-            pair = pair.slice(0,3) + '/' + pair.slice(3);
-        }
+    }
+    // If not found, fallback to first dataset (if any)
+    if (!targetDataset && datasets.length > 0) {
+        targetDataset = datasets[0];
+        targetPair = targetDataset.pair;
+    }
+    
+    if (targetDataset) {
+        const { pair, timeframe } = targetDataset;
         
         // Set timeframe UI
-        currentTimeframe = timeframe;
-        document.getElementById('timeframe-btn').innerText = timeframe + ' ▾';
+        window.setTimeframe(timeframe);
         
         // Set source to local
         await window.setDataSource('local');
@@ -612,6 +629,7 @@ window.onresize();
     } else {
         // No local data, start with empty source
         window.setDataSource('none');
+        addLog('No local data found, starting with empty source.');
     }
     // (удалено - setupConditionCheckboxes больше не вызывается)
 })();
@@ -812,6 +830,152 @@ window.applyAllSettings = function() {
         addLog('Ошибка: Strategy не загружен');
     }
 };
+// ==================== Управление кодом стратегии ====================
+
+/**
+ * Загружает исходный код из strategy-core.js в текстовое поле редактора.
+ */
+window.loadStrategyCode = function() {
+    const editor = document.getElementById('strategy-code-editor');
+    if (!editor) {
+        addLog('Ошибка: текстовое поле strategy-code-editor не найдено');
+        return;
+    }
+    // Получить содержимое window.StrategyCore (если оно есть) или загрузить через fetch
+    if (window.StrategyCore && window.StrategyCore.toString) {
+        // Если StrategyCore - объект, можно сериализовать его функции
+        let code = '';
+        for (const key in window.StrategyCore) {
+            if (typeof window.StrategyCore[key] === 'function') {
+                code += `// ${key}\n${window.StrategyCore[key].toString()}\n\n`;
+            }
+        }
+        if (code) {
+            editor.value = code;
+            addLog('Код стратегии загружен из window.StrategyCore');
+            updateStrategyCodeStatus('Код загружен из памяти', 'info');
+            return;
+        }
+    }
+    // Иначе попробуем загрузить файл через fetch
+    fetch('./strategy_core.js')
+        .then(response => {
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            return response.text();
+        })
+        .then(text => {
+            editor.value = text;
+            addLog('Код стратегии загружен из файла strategy-core.js');
+            updateStrategyCodeStatus('Код загружен из файла', 'success');
+        })
+        .catch(err => {
+            addLog('Не удалось загрузить файл strategy-core.js: ' + err.message);
+            updateStrategyCodeStatus('Ошибка загрузки', 'error');
+        });
+};
+
+/**
+ * Применяет изменённый код стратегии, выполняя его и обновляя window.StrategyCore.
+ */
+window.applyStrategyCode = function() {
+    const editor = document.getElementById('strategy-code-editor');
+    if (!editor) {
+        addLog('Ошибка: текстовое поле strategy-code-editor не найдено');
+        return;
+    }
+    const code = editor.value.trim();
+    if (!code) {
+        addLog('Код стратегии пуст');
+        updateStrategyCodeStatus('Код пуст', 'warning');
+        return;
+    }
+    try {
+        // Сохраняем предыдущий StrategyCore для отката
+        const previousStrategyCore = window.StrategyCore ? { ...window.StrategyCore } : null;
+        // Выполняем код в глобальной области видимости
+        // Используем new Function для безопасного выполнения (без доступа к локальным переменным)
+        const execute = new Function(code);
+        execute();
+        // Проверяем, что window.StrategyCore обновился (или создался)
+        if (window.StrategyCore && typeof window.StrategyCore.createConditionContext === 'function') {
+            addLog('Код стратегии успешно применён');
+            updateStrategyCodeStatus('Код применён успешно', 'success');
+            // Обновляем стратегию, если она использует StrategyCore
+            if (window.Strategy && window.Strategy.updateFromCore) {
+                window.Strategy.updateFromCore();
+            }
+        } else {
+            // Если StrategyCore не определён, откатываем
+            window.StrategyCore = previousStrategyCore;
+            addLog('Ошибка: после выполнения кода window.StrategyCore не определён');
+            updateStrategyCodeStatus('StrategyCore не определён', 'error');
+        }
+    } catch (err) {
+        addLog('Ошибка выполнения кода стратегии: ' + err.message);
+        updateStrategyCodeStatus('Ошибка выполнения: ' + err.message, 'error');
+    }
+};
+
+/**
+ * Сбрасывает код в редакторе к исходному содержимому файла strategy-core.js.
+ */
+window.resetStrategyCode = function() {
+    const editor = document.getElementById('strategy-code-editor');
+    if (!editor) {
+        addLog('Ошибка: текстовое поле strategy-code-editor не найдено');
+        return;
+    }
+    fetch('./strategy_core.js')
+        .then(response => {
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            return response.text();
+        })
+        .then(text => {
+            editor.value = text;
+            addLog('Код стратегии сброшен к исходному файлу');
+            updateStrategyCodeStatus('Код сброшен', 'info');
+        })
+        .catch(err => {
+            addLog('Не удалось загрузить исходный файл: ' + err.message);
+            updateStrategyCodeStatus('Ошибка загрузки', 'error');
+        });
+};
+
+/**
+ * Обновляет статусную строку под редактором кода.
+ */
+function updateStrategyCodeStatus(message, type) {
+    const statusEl = document.getElementById('strategy-code-status');
+    if (!statusEl) return;
+    statusEl.textContent = message;
+    statusEl.style.color =
+        type === 'success' ? '#4caf50' :
+        type === 'error' ? '#f44336' :
+        type === 'warning' ? '#ff9800' :
+        type === 'info' ? '#2196f3' : '#b2b5be';
+}
+
+// Автоматически загрузить код при открытии панели настроек
+document.addEventListener('DOMContentLoaded', () => {
+    // Загрузить код через небольшую задержку, чтобы все скрипты загрузились
+    setTimeout(() => {
+        const panel = document.getElementById('settings-panel');
+        if (panel) {
+            // Используем MutationObserver для определения открытия панели
+            const observer = new MutationObserver((mutations) => {
+                mutations.forEach(mutation => {
+                    if (mutation.attributeName === 'class' && panel.classList.contains('open')) {
+                        // Панель открыта, загружаем код
+                        window.loadStrategyCode();
+                        observer.disconnect(); // отключаем после первого открытия
+                    }
+                });
+            });
+            observer.observe(panel, { attributes: true });
+        }
+    }, 500);
+});
+
 // Вставить переменную в поле условия (старая функция для condition-input)
 window.insertVariable = function(varName) {
     const textarea = document.getElementById('condition-input');
@@ -1085,4 +1249,40 @@ window.addEventListener('DOMContentLoaded', () => {
     const toggleButton = document.getElementById('settings-toggle');
     if (!toggleButton) addLog('Ошибка: кнопка settings-toggle не найдена');
     else addLog('Кнопка settings-toggle найдена');
+
+    // Обработка кликов для TF dropdown
+    const tfDropdown = document.querySelector('#tf-btn + .dropdown');
+    if (tfDropdown) {
+        const items = tfDropdown.querySelectorAll('.ind-row:not(.header)');
+        items.forEach(item => {
+            item.addEventListener('click', () => {
+                const value = item.getAttribute('data-value');
+                if (value) {
+                    window.setTimeframe(value);
+                    // Закрыть dropdown
+                    const menuItem = item.closest('.menu-item');
+                    if (menuItem) menuItem.classList.remove('open');
+                }
+            });
+        });
+        // Заголовок TF не кликабелен
+        const header = tfDropdown.querySelector('.ind-row.header');
+        if (header) {
+            header.style.pointerEvents = 'none';
+            header.style.cursor = 'default';
+        }
+    } else {
+        addLog('TF dropdown не найден');
+    }
+
+    // Обработка кликов для Range dropdown (если нужно, но уже есть в index.html через onclick)
+    // Проверим, что заголовок Range также не кликабелен
+    const rangeDropdown = document.querySelector('#range-btn + .dropdown');
+    if (rangeDropdown) {
+        const header = rangeDropdown.querySelector('.ind-row.header');
+        if (header) {
+            header.style.pointerEvents = 'none';
+            header.style.cursor = 'default';
+        }
+    }
 });
