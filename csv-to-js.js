@@ -4,7 +4,7 @@
  * Скрипт для конвертации CSV файлов котировок в JS файлы с данными.
  * Обрабатывает все файлы с расширением .csv в текущей директории.
  * Для каждого CSV создаёт JS файл с именем [базовое_имя]_data.js,
- * содержащий глобальную переменную window[базовое_имя_data] = [...]
+ * содержащий ES-модуль с экспортом массива свечей по умолчанию.
  */
 
 const fs = require('fs');
@@ -100,9 +100,9 @@ async function convertCSV(csvPath) {
     // Сортируем по времени (на всякий случай)
     candles.sort((a, b) => a.time - b.time);
 
-    // Генерируем JS код
+    // Генерируем JS код (ES-модуль)
     const jsCode = `// Автоматически сгенерировано из ${basename}.csv
-window.${basename}_data = ${JSON.stringify(candles, null, 2)};`;
+export default ${JSON.stringify(candles, null, 2)};`;
 
     // Записываем в файл
     fs.writeFileSync(jsPath, jsCode, ENCODING);

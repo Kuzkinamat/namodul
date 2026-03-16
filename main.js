@@ -62,94 +62,7 @@ window.DataUtils = {
     }
 };
 
-// Local CSV Data Provider
-window.LocalCSVProvider = {
-    /**
-     * Scan window for global variables ending with '_data' (e.g., EURUSD_M5_data)
-     * Returns array of objects { pair, timeframe, data }.
-     */
-    scanDataVariables: function() {
-        const datasets = [];
-        for (const key in window) {
-            if (key.endsWith('_data') && Array.isArray(window[key])) {
-                // Extract pair and timeframe from variable name
-                // Example: EURUSD_M5_data -> pair = 'EUR/USD', timeframe = '5m'
-                const base = key.slice(0, -5); // remove '_data'
-                let pair = base;
-                let timeframe = '1m';
-                // Detect timeframe suffix like _M1, _M5, _M15, _H1, _H4, _D1, _W1, _MN
-                const tfMatch = base.match(/_([MHDW])(\d+)$/);
-                if (tfMatch) {
-                    const type = tfMatch[1];
-                    const num = parseInt(tfMatch[2]);
-                    pair = base.slice(0, -tfMatch[0].length);
-                    if (type === 'M') timeframe = num + 'm';
-                    else if (type === 'H') timeframe = num + 'H';
-                    else if (type === 'D') timeframe = num + 'D';
-                    else if (type === 'W') timeframe = num + 'W';
-                    else if (type === 'MN') timeframe = num + 'M';
-                }
-                // Convert pair from EURUSD to EUR/USD
-                if (pair.length === 6 && !pair.includes('/')) {
-                    pair = pair.slice(0,3) + '/' + pair.slice(3);
-                }
-                datasets.push({
-                    variable: key,
-                    pair: pair,
-                    timeframe: timeframe,
-                    data: window[key]
-                });
-            }
-        }
-        return datasets;
-    },
 
-    /**
-     * Get list of available trading pairs (unique)
-     */
-    getPairs: function() {
-        const datasets = this.scanDataVariables();
-        const pairs = [...new Set(datasets.map(d => d.pair))];
-        return pairs;
-    },
-
-    /**
-     * Get pairs filtered by timeframe (if timeframe is selected)
-     */
-    getPairsByTimeframe: function(timeframe) {
-        const datasets = this.scanDataVariables();
-        return datasets.filter(d => d.timeframe === timeframe).map(d => d.pair);
-    },
-
-    /**
-     * Request access (always succeeds for local data)
-     */
-    requestAccess: async function() {
-        addLog("Local CSV data provider initialized.");
-        return true;
-    },
-
-    /**
-     * Fetch data for a specific pair, timeframe, and range.
-     * Returns the last N candles where N = DataUtils.calculateOutputSize(range, timeframe).
-     */
-    fetchData: async function(range, timeframe, pair) {
-        addLog(`Loading local data: ${pair}, Timeframe: ${timeframe}, Range: ${range}`);
-        const datasets = this.scanDataVariables();
-        const dataset = datasets.find(d => d.pair === pair && d.timeframe === timeframe);
-        if (!dataset) {
-            throw new Error(`No local data found for ${pair} (TF: ${timeframe})`);
-        }
-        // Calculate how many candles we need based on range and timeframe
-        const outputSize = window.DataUtils.calculateOutputSize(range, timeframe);
-        // Return the last 'outputSize' candles (or all if dataset is smaller)
-        const sliceStart = Math.max(0, dataset.data.length - outputSize);
-        const slicedData = dataset.data.slice(sliceStart);
-        addLog(`Local data sliced: ${dataset.data.length} -> ${slicedData.length} candles (Range: ${range})`);
-        // Return a copy to avoid mutation
-        return slicedData.slice();
-    }
-};
 
 // Chart configuration
 const chartOpts = {
@@ -231,14 +144,14 @@ window.setDataSource = async (type) => {
         if (await window.TwelveDataProvider.requestAccess()) {
             renderPairs(window.TwelveDataProvider.getPairs());
         }
-    } else if (type === 'local' && window.LocalCSVProvider) {
-        addLog("Initializing Local CSV data...");
-        if (await window.LocalCSVProvider.requestAccess()) {
+    } else if (type === 'local' && window.LocalJsProvider) {
+        addLog("Initializing Local data...");
+        if (await window.LocalJsProvider.requestAccess()) {
             // Filter pairs by current timeframe (if any)
-            const pairs = window.LocalCSVProvider.getPairsByTimeframe(currentTimeframe);
+            const pairs = await window.LocalJsProvider.getPairsByTimeframe(currentTimeframe);
             if (pairs.length === 0) {
                 // Fallback to all pairs
-                renderPairs(window.LocalCSVProvider.getPairs());
+                renderPairs(await window.LocalJsProvider.getPairs());
             } else {
                 renderPairs(pairs);
             }
@@ -252,7 +165,7 @@ window.setPair = async (p) => {
     document.getElementById('pair-btn').innerText = p + ' ▾';
     let provider = null;
     if (currentSource === 'twelvedata') provider = window.TwelveDataProvider;
-    else if (currentSource === 'local') provider = window.LocalCSVProvider;
+    else if (currentSource === 'local') provider = window.LocalJsProvider;
     if (provider) {
         addLog(`Fetching data: ${p}, Range: ${currentRange}, Timeframe: ${currentTimeframe}`);
         const newData = await provider.fetchData(currentRange, currentTimeframe, p);
@@ -346,12 +259,6 @@ function updateIndicatorValues() {
     setText('sell-stochasticK-val', formatPercent(stochK));
     setText('sell-stochasticD-val', formatPercent(stochD));
 
-    // Цены (убраны, так как элементы удалены из HTML)
-    // SMA и BB (не используются в списках, но можно оставить для отладки)
-    // setText('val-sma', format(smaVal));
-    // setText('val-bb', `U:${format(bbUpper)} M:${format(bbMiddle)} L:${format(bbLower)}`);
-    // setText('val-macd', `MACD:${format(macdVal, 5)} Sig:${format(macdSignalVal, 5)} Hist:${format(macdHist, 5)}`);
-    // setText('val-stochastic', `K:${formatPercent(stochK)} D:${formatPercent(stochD)}`);
 
     // Сохранить текущие значения переменных для вставки
     window.currentIndicatorValues = {
@@ -592,8 +499,8 @@ window.onresize();
     // Wait a bit for all scripts to load
     await new Promise(resolve => setTimeout(resolve, 100));
     
-    // Use LocalCSVProvider to scan available datasets
-    const datasets = window.LocalCSVProvider ? window.LocalCSVProvider.scanDataVariables() : [];
+    // Use LocalJsProvider to scan available modules
+    const datasets = window.LocalJsProvider ? await window.LocalJsProvider.scanModules() : [];
     let targetPair = 'EUR/USD';
     let targetDataset = null;
     
@@ -631,7 +538,6 @@ window.onresize();
         window.setDataSource('none');
         addLog('No local data found, starting with empty source.');
     }
-    // (удалено - setupConditionCheckboxes больше не вызывается)
 })();
 
 // Открыть/закрыть панель настроек
@@ -640,47 +546,13 @@ window.toggleSettings = function() {
     if (panel) {
         panel.classList.toggle('open');
         const isOpen = panel.classList.contains('open');
-        // console.log removed
         addLog(isOpen ? 'Панель настроек открыта' : 'Панель настроек закрыта');
     } else {
         addLog('Ошибка: панель настроек не найдена в toggleSettings');
     }
 };
 
-// (удалено - заменено на applyAllSettings)
 
-// Экспорт данных в CSV или JSON
-window.exportData = function(format) {
-    if (!window.data || window.data.length === 0) {
-        addLog('Нет данных для экспорта');
-        return;
-    }
-    let content, mime, filename;
-    if (format === 'csv') {
-        const headers = ['time', 'open', 'high', 'low', 'close'];
-        const rows = window.data.map(d => [d.time, d.open, d.high, d.low, d.close].join(','));
-        content = [headers.join(','), ...rows].join('\n');
-        mime = 'text/csv';
-        filename = `data_${new Date().toISOString().slice(0,10)}.csv`;
-    } else if (format === 'json') {
-        content = JSON.stringify(window.data, null, 2);
-        mime = 'application/json';
-        filename = `data_${new Date().toISOString().slice(0,10)}.json`;
-    } else {
-        addLog('Неизвестный формат экспорта');
-        return;
-    }
-    const blob = new Blob([content], { type: mime });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    addLog(`Данные экспортированы в ${format.toUpperCase()}`);
-};
 
 
 // Навигация по маркерам с поддержкой 'first' и 'last'
@@ -762,7 +634,6 @@ window.navigateToEnd = function() {
 // Применить все настройки (индикаторы и стратегия) из новой панели с тремя окнами
 window.applyAllSettings = function() {
     addLog('Применение всех настроек...');
-    // console.log removed
     // 1. Настройки индикаторов (JSON из textarea)
     const indicatorSettingsTextarea = document.getElementById('indicator-settings');
     let rawSettings = {};
@@ -858,7 +729,7 @@ window.loadStrategyCode = function() {
         }
     }
     // Иначе попробуем загрузить файл через fetch
-    fetch('./strategy_core.js')
+    fetch('./strategy-core.js')
         .then(response => {
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             return response.text();
@@ -925,7 +796,7 @@ window.resetStrategyCode = function() {
         addLog('Ошибка: текстовое поле strategy-code-editor не найдено');
         return;
     }
-    fetch('./strategy_core.js')
+    fetch('./strategy-core.js')
         .then(response => {
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             return response.text();
@@ -976,90 +847,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 500);
 });
 
-// Вставить переменную в поле условия (старая функция для condition-input)
-window.insertVariable = function(varName) {
-    const textarea = document.getElementById('condition-input');
-    if (!textarea) return;
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const text = textarea.value;
-    const before = text.substring(0, start);
-    const after = text.substring(end);
-    textarea.value = before + varName + after;
-    // Установить курсор после вставленной переменной
-    const newPos = start + varName.length;
-    textarea.selectionStart = newPos;
-    textarea.selectionEnd = newPos;
-    textarea.focus();
-};
 
-// Вставить переменную в указанное текстовое поле (новая функция для трёх окон)
-window.insertVariableIntoEditor = function(textareaId, varName) {
-    const textarea = document.getElementById(textareaId);
-    if (!textarea) {
-        addLog('Предупреждение: текстовое поле не найдено: ' + textareaId);
-        return;
-    }
-    // Маппинг имён переменных на ключи в window.currentIndicatorValues
-    const varMapping = {
-        'macd': 'macdVal',
-        'signal': 'macdSignalVal',
-        'histogram': 'macdHist',
-        'stochasticK': 'stochK',
-        'stochasticD': 'stochD',
-        'sma': 'smaVal',
-        'bbUpper': 'bbUpper',
-        'bbMiddle': 'bbMiddle',
-        'bbLower': 'bbLower',
-        'close': 'close',
-        'open': 'open',
-        'high': 'high',
-        'low': 'low'
-    };
-    const key = varMapping[varName] || varName;
-    let value = window.currentIndicatorValues ? window.currentIndicatorValues[key] : null;
-    // Если значение не найдено, используем имя переменной
-    let insertText;
-    if (value !== null && value !== undefined) {
-        // Вставляем в формате "varName = value"
-        insertText = varName + ' = ' + value.toString();
-    } else {
-        insertText = varName;
-    }
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const text = textarea.value;
-    const before = text.substring(0, start);
-    const after = text.substring(end);
-    textarea.value = before + insertText + after;
-    // Установить курсор после вставленной переменной
-    const newPos = start + insertText.length;
-    textarea.selectionStart = newPos;
-    textarea.selectionEnd = newPos;
-    textarea.focus();
-};
 
-// Вставить готовое условие в указанное текстовое поле
-window.insertConditionIntoEditor = function(textareaId, condition) {
-    const textarea = document.getElementById(textareaId);
-    if (!textarea) {
-        addLog('Предупреждение: текстовое поле не найдено: ' + textareaId);
-        return;
-    }
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const text = textarea.value;
-    const before = text.substring(0, start);
-    const after = text.substring(end);
-    textarea.value = before + condition + after;
-    // Установить курсор после вставленного условия
-    const newPos = start + condition.length;
-    textarea.selectionStart = newPos;
-    textarea.selectionEnd = newPos;
-    textarea.focus();
-};
-
-// (удалено - функция setupConditionCheckboxes больше не нужна)
 // ==================== Модальное окно настроек индикаторов ====================
 
 /**
