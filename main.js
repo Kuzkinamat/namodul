@@ -98,7 +98,7 @@ window.setRange = (r) => {
     reloadDataIfNeeded();
 };
 
-window.setTimeframe = (tf) => {
+window.setTimeframe = async (tf) => {
     currentTimeframe = tf;
     // Обновить текст кнопки TF (например, "m1 ▾")
     const displayMap = { '1m': 'm1', '5m': 'm5', '15m': 'm15' };
@@ -106,6 +106,8 @@ window.setTimeframe = (tf) => {
     const tfBtn = document.getElementById('tf-btn');
     if (tfBtn) tfBtn.innerText = display + ' ▾';
     addLog(`Timeframe set to: ${tf}`);
+    // Обновить список пар для текущего источника
+    await updatePairListForCurrentSource();
     // Перезагрузить данные, если источник выбран
     reloadDataIfNeeded();
 };
@@ -114,6 +116,37 @@ function reloadDataIfNeeded() {
     if (currentSource !== 'none' && currentPair) {
         // Перезагрузить данные с текущими параметрами
         window.setPair(currentPair);
+    }
+}
+
+async function updatePairListForCurrentSource() {
+    if (currentSource === 'none') {
+        // Очистить список пар
+        renderPairs([]);
+        return;
+    }
+    if (currentSource === 'twelvedata' && window.TwelveDataProvider) {
+        const pairs = window.TwelveDataProvider.getPairs();
+        renderPairs(pairs);
+    } else if (currentSource === 'local' && window.LocalJsProvider) {
+        // Фильтруем пары по текущему TF
+        const pairs = await window.LocalJsProvider.getPairsByTimeframe(currentTimeframe);
+        if (pairs.length === 0) {
+            // Если для данного TF нет файлов, очищаем список пар и график
+            renderPairs([]);
+            // Также очищаем график, если пара была выбрана
+            if (currentPair) {
+                data = []; window.data = data;
+                candleSeries.setData([]);
+                Object.keys(mainSeriesRefs).forEach(id => { mainSeriesRefs[id].forEach(s => chartMain.removeSeries(s)); delete mainSeriesRefs[id]; });
+                Object.keys(activePanes).forEach(id => { activePanes[id].chart.remove(); document.getElementById(`wrapper-${id}`)?.remove(); delete activePanes[id]; });
+                currentPair = '';
+                document.getElementById('pair-btn').innerText = 'Select ▾';
+                addLog('No pairs for selected timeframe, cleared chart.');
+            }
+        } else {
+            renderPairs(pairs);
+        }
     }
 }
 
@@ -139,22 +172,17 @@ window.setDataSource = async (type) => {
         Object.keys(activePanes).forEach(id => { activePanes[id].chart.remove(); document.getElementById(`wrapper-${id}`)?.remove(); delete activePanes[id]; });
         document.querySelectorAll('#indicator-menu input[type=\"checkbox\"]').forEach(cb => cb.checked = false);
         addLog("Source cleared.");
+        // Очистить список пар
+        renderPairs([]);
     } else if (type === 'twelvedata' && window.TwelveDataProvider) {
         addLog("Initializing Twelve Data API connection...");
         if (await window.TwelveDataProvider.requestAccess()) {
-            renderPairs(window.TwelveDataProvider.getPairs());
+            await updatePairListForCurrentSource();
         }
     } else if (type === 'local' && window.LocalJsProvider) {
         addLog("Initializing Local data...");
         if (await window.LocalJsProvider.requestAccess()) {
-            // Filter pairs by current timeframe (if any)
-            const pairs = await window.LocalJsProvider.getPairsByTimeframe(currentTimeframe);
-            if (pairs.length === 0) {
-                // Fallback to all pairs
-                renderPairs(await window.LocalJsProvider.getPairs());
-            } else {
-                renderPairs(pairs);
-            }
+            await updatePairListForCurrentSource();
         }
     }
     window.onresize();

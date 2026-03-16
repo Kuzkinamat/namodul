@@ -5,12 +5,8 @@ window.LocalJsProvider = {
     // Кэш загруженных модулей: { [modulePath]: { pair, timeframe, data } }
     _moduleCache: {},
 
-    // Список известных модулей данных (можно расширить)
-    _knownModules: [
-        { path: './EURUSD_M5_data.js', pair: 'EUR/USD', timeframe: '5m' },
-        { path: './CADCHF_M5_data.js', pair: 'CAD/CHF', timeframe: '5m' },
-        { path: './AUDCAD_M5_data.js', pair: 'AUD/CAD', timeframe: '5m' }
-    ],
+    // Динамический список модулей, полученный сканированием папки data
+    _knownModules: null, // будет заполнен при первом сканировании
 
     /**
      * Загружает модуль по пути и возвращает данные.
@@ -99,9 +95,101 @@ window.LocalJsProvider = {
     },
 
     /**
+     * Сканирует папку data через fetch (листинг директорий) или загружает index.json.
+     * Возвращает массив объектов { path, pair, timeframe }.
+     */
+    async _scanDataFolder() {
+        // Пробуем загрузить index.json
+        try {
+            const response = await fetch('data/index.json');
+            if (response.ok) {
+                const index = await response.json();
+                // Ожидаем массив объектов с полями filename, pair, timeframe
+                // или просто массив имён файлов.
+                if (Array.isArray(index)) {
+                    const modules = index.map(item => {
+                        if (typeof item === 'string') {
+                            const basename = item.replace('_data.js', '');
+                            return {
+                                path: './data/' + item,
+                                pair: this._extractPair(basename),
+                                timeframe: this._extractTimeframe(basename)
+                            };
+                        } else {
+                            // Уже объект
+                            return {
+                                path: './data/' + item.filename,
+                                pair: item.pair || this._extractPair(item.filename.replace('_data.js', '')),
+                                timeframe: item.timeframe || this._extractTimeframe(item.filename.replace('_data.js', ''))
+                            };
+                        }
+                    });
+                    console.log('Сканирование через index.json: найдено', modules.length, 'файлов', modules);
+                    return modules;
+                }
+            }
+        } catch (e) {
+            // index.json не найден или ошибка сети
+            console.warn('Не удалось загрузить data/index.json:', e.message);
+        }
+
+        // Пробуем получить листинг директории data/
+        try {
+            const response = await fetch('data/');
+            if (response.ok) {
+                const html = await response.text();
+                console.log('HTML листинга data/ (первые 2000 символов):', html.substring(0, 2000));
+                // Парсим HTML листинга (простой regex для ссылок на файлы)
+                const matches = html.match(/href="([^"]*_data\.js)"/g);
+                if (matches) {
+                    const files = matches.map(m => m.replace('href="', '').replace('"', ''));
+                    console.log('Все ссылки на _data.js:', files);
+                    // Фильтруем только файлы _data.js
+                    const dataFiles = files.filter(f => f.endsWith('_data.js') && !f.includes('?'));
+                    console.log('Отфильтрованные файлы данных:', dataFiles);
+                    const modules = dataFiles.map(filename => {
+                        const basename = filename.replace('_data.js', '');
+                        return {
+                            path: './data/' + filename,
+                            pair: this._extractPair(basename),
+                            timeframe: this._extractTimeframe(basename)
+                        };
+                    });
+                    console.log('Сформированные модули:', modules);
+                    return modules;
+                } else {
+                    console.warn('Не найдено ссылок на _data.js в HTML листинга');
+                }
+            } else {
+                console.warn('Ответ от data/ не OK:', response.status, response.statusText);
+            }
+        } catch (e) {
+            console.warn('Не удалось получить листинг папки data:', e.message);
+        }
+
+        // Если ничего не получилось, возвращаем пустой массив
+        console.warn('Динамическое сканирование не удалось. Используется fallback список.');
+        return [
+            { path: './EURUSD_M5_data.js', pair: 'EUR/USD', timeframe: '5m' }
+        ];
+    },
+
+    /**
+     * Обеспечивает, что _knownModules заполнен.
+     */
+    async _ensureKnownModules() {
+        if (this._knownModules === null) {
+            this._knownModules = await this._scanDataFolder();
+            addLog(`Сканирование папки data: найдено ${this._knownModules.length} файлов данных.`);
+        }
+    },
+
+    /**
      * Сканирует все известные модули и возвращает массив datasets.
      */
     async scanModules() {
+        await this._ensureKnownModules();
+        console.log('Известные модули (_knownModules):', this._knownModules);
         const datasets = [];
         for (const mod of this._knownModules) {
             try {
@@ -114,9 +202,11 @@ window.LocalJsProvider = {
                 });
             } catch (err) {
                 // Пропустить модуль, который не загрузился
+                console.warn('Ошибка загрузки модуля', mod.path, err);
                 continue;
             }
         }
+        console.log('Загруженные datasets:', datasets.map(d => `${d.pair} (${d.timeframe})`));
         // Также сканируем глобальные переменные для обратной совместимости (опционально)
         // Можно оставить, но по требованию убираем.
         return datasets;
@@ -136,7 +226,9 @@ window.LocalJsProvider = {
      */
     async getPairsByTimeframe(timeframe) {
         const datasets = await this.scanModules();
-        return datasets.filter(d => d.timeframe === timeframe).map(d => d.pair);
+        const filtered = datasets.filter(d => d.timeframe === timeframe);
+        addLog(`Фильтрация по TF ${timeframe}: найдено ${filtered.length} наборов данных`);
+        return filtered.map(d => d.pair);
     },
 
     /**
@@ -144,6 +236,8 @@ window.LocalJsProvider = {
      */
     async requestAccess() {
         addLog("Local data provider initialized (ES modules).");
+        await this._ensureKnownModules();
+        addLog(`Доступно файлов данных: ${this._knownModules.length}`);
         return true;
     },
 

@@ -1,4 +1,2 @@
-web.config
 lightweight-charts.standalone.production.js
-EURUSD_M5_data.js
-CADCHF_M5_data.js
+data/*
