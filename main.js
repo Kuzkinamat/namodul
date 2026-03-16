@@ -199,6 +199,10 @@ window.setPair = async (p) => {
         const newData = await provider.fetchData(currentRange, currentTimeframe, p);
         if (!newData || !newData.length) return addLog("No data received");
         data = newData;
+        // Обогатить данные признаком торговых часов (если StrategyCore доступен)
+        if (window.StrategyCore && window.StrategyCore.enrichDataWithTradingHours) {
+            data = window.StrategyCore.enrichDataWithTradingHours(data);
+        }
         window.data = data;
         candleSeries.setData(data);
         chartMain.timeScale().fitContent();
@@ -234,38 +238,43 @@ function updateIndicatorValues() {
     const candle = data[idx];
     if (!candle) return;
 
-    // Получить параметры индикаторов из Strategy (или использовать значения по умолчанию)
-    const params = window.Strategy?.params || {};
-    const smaPeriod = params.smaPeriod || 20;
-    const bbPeriod = params.bbPeriod || 20;
-    const bbStdDev = params.bbStdDev || 2;
-    const macdFast = params.macdFast || 12;
-    const macdSlow = params.macdSlow || 26;
-    const macdSignal = params.macdSignal || 9;
-    const stochasticK = params.stochasticK || 14;
-    const stochasticD = params.stochasticD || 3;
-    const stochasticSlowing = params.stochasticSlowing || 3;
+    const coreDefaults = window.StrategyCore && typeof window.StrategyCore.getDefaultParams === 'function'
+        ? window.StrategyCore.getDefaultParams()
+        : {};
+    const params = { ...coreDefaults, ...(window.Strategy?.params || {}) };
 
-    // Вычислить индикаторы для всей серии (или только для нужного индекса)
-    const sma = window.calcSMA(data, smaPeriod);
-    const bb = window.calcBB(data, bbPeriod, bbStdDev);
-    const macd = window.calcMACD(data, macdFast, macdSlow, macdSignal);
-    const stochastic = window.calcStochastic(data, stochasticK, stochasticD, stochasticSlowing);
+    let indicators = null;
+    if (window.StrategyCore && typeof window.StrategyCore.calculateIndicators === 'function') {
+        indicators = window.StrategyCore.calculateIndicators(data, params, {
+            only: ['sma', 'bb', 'macd', 'stochastic'],
+            forceAll: true,
+            silent: true
+        });
+    }
+
+    if (!indicators) {
+        indicators = {
+            sma: window.calcSMA(data, params.smaPeriod || 20),
+            bb: window.calcBB(data, params.bbPeriod || 20, params.bbStdDev || 2),
+            macd: window.calcMACD(data, params.macdFast || 12, params.macdSlow || 26, params.macdSignal || 9),
+            stochastic: window.calcStochastic(data, params.stochasticK || 14, params.stochasticD || 3, params.stochasticSlowing || 3)
+        };
+    }
 
     // Получить значения для текущего индекса
-    const smaVal = sma[idx]?.value;
-    const bbUpper = bb[idx]?.upper;
-    const bbMiddle = bb[idx]?.middle;
-    const bbLower = bb[idx]?.lower;
-    const macdVal = macd[idx]?.macd;
-    const macdSignalVal = macd[idx]?.signal;
-    const macdHist = macd[idx]?.histogram;
-    const stochK = stochastic[idx]?.k;
-    const stochD = stochastic[idx]?.d;
+    const smaVal = indicators.sma[idx]?.value;
+    const bbUpper = indicators.bb[idx]?.upper;
+    const bbMiddle = indicators.bb[idx]?.middle;
+    const bbLower = indicators.bb[idx]?.lower;
+    const macdVal = indicators.macd[idx]?.macd;
+    const macdSignalVal = indicators.macd[idx]?.signal;
+    const macdHist = indicators.macd[idx]?.histogram;
+    const stochK = indicators.stochastic[idx]?.k;
+    const stochD = indicators.stochastic[idx]?.d;
 
     // Форматирование
-    const format = (v, digits = 5) => v === null ? '—' : v.toFixed(digits);
-    const formatPercent = (v) => v === null ? '—' : v.toFixed(2) + '%';
+    const format = (v, digits = 5) => (v === null || v === undefined || !Number.isFinite(v)) ? '—' : v.toFixed(digits);
+    const formatPercent = (v) => (v === null || v === undefined || !Number.isFinite(v)) ? '—' : v.toFixed(2) + '%';
 
     // Обновить DOM элементы для переменных покупки и продажи
     const setText = (id, text) => {
@@ -330,6 +339,10 @@ function syncAll(source) {
 
 chartMain.timeScale().subscribeVisibleLogicalRangeChange(() => syncAll(chartMain));
 
+function toLinePoint(time, value) {
+    return Number.isFinite(value) ? { time, value } : { time };
+}
+
 /**
  * Включает/выключает индикатор на графике.
  * Для индикаторов, отображаемых в отдельных панелях (Stochastic, MACD), создаёт отдельный чарт.
@@ -348,25 +361,25 @@ window.toggleIndicator = function(id, isChecked) {
     }
     if (!data.length) return;
 
+    const coreDefaults = window.StrategyCore && typeof window.StrategyCore.getDefaultParams === 'function'
+        ? window.StrategyCore.getDefaultParams()
+        : {};
+    const params = { ...coreDefaults, ...(window.Strategy?.params || {}) };
+
     if (id === 'SMA' || id === 'BB') {
         if (mainSeriesRefs[id]) mainSeriesRefs[id].forEach(s => chartMain.removeSeries(s));
         mainSeriesRefs[id] = [];
         if (id === 'SMA') {
             const s = chartMain.addSeries(LightweightCharts.LineSeries, { color: '#ff00a6', lineWidth: 1, lastValueVisible: false, priceLineVisible: false });
-            const sma = data.map((d, i) => i < 19 ? { time: d.time, value: null } : { time: d.time, value: data.slice(i-19, i+1).reduce((a,b)=>a+b.close, 0)/20 });
-            s.setData(sma); mainSeriesRefs[id].push(s);
+            const sma = window.calcSMA(data, params.smaPeriod || 20);
+            s.setData(sma.map(point => toLinePoint(point.time, point.value))); mainSeriesRefs[id].push(s);
         }
         if (id === 'BB') {
-            const bb = data.map((d, i) => {
-                if (i < 19) return { time: d.time, t: null, m: null, b: null };
-                const sl = data.slice(i-19, i+1).map(x => x.close);
-                const m = sl.reduce((a, b) => a + b, 0) / 20;
-                const sd = Math.sqrt(sl.reduce((a, b) => a + Math.pow(b - m, 2), 0) / 20);
-                return { time: d.time, t: m + 2 * sd, m: m, b: m - 2 * sd };
-            });
+            const bb = window.calcBB(data, params.bbPeriod || 20, params.bbStdDev || 2);
             [{k:'t', c:'rgba(38,166,154,0.3)'}, {k:'m', c:'rgba(33,150,243,0.5)'}, {k:'b', c:'rgba(38,166,154,0.3)'}].forEach(o => {
                 const s = chartMain.addSeries(LightweightCharts.LineSeries, { color: o.c, lineWidth: 1, lastValueVisible: false, priceLineVisible: false });
-                s.setData(bb.map(v => ({ time: v.time, value: v[o.k] }))); mainSeriesRefs[id].push(s);
+                const keyMap = { t: 'upper', m: 'middle', b: 'lower' };
+                s.setData(bb.map(v => toLinePoint(v.time, v[keyMap[o.k]]))); mainSeriesRefs[id].push(s);
             });
         }
     } else {
@@ -386,7 +399,7 @@ window.toggleIndicator = function(id, isChecked) {
         const pane = activePanes[id];
         pane.series.forEach(s => pane.chart.removeSeries(s)); pane.series = [];
         if (id === 'Stochastic') {
-            const stochasticData = calcStochastic(data, 14, 3, 3);
+            const stochasticData = calcStochastic(data, params.stochasticK || 14, params.stochasticD || 3, params.stochasticSlowing || 3);
             // Logging for debugging
             addLog(`Stochastic data length: ${stochasticData.length}`);
             // Log first 5 elements
@@ -419,11 +432,15 @@ window.toggleIndicator = function(id, isChecked) {
             const h = pane.chart.addSeries(LightweightCharts.HistogramSeries, { lastValueVisible: false, priceLineVisible: false });
             const l1 = pane.chart.addSeries(LightweightCharts.LineSeries, { color: '#2196f3', lineWidth: 1, lastValueVisible: false, priceLineVisible: false });
             const l2 = pane.chart.addSeries(LightweightCharts.LineSeries, { color: '#ff9800', lineWidth:1, lastValueVisible: false, priceLineVisible: false });
-            const e12 = calcEMA(data, 12), e26 = calcEMA(data, 26);
-            const m = e12.map((e,i)=>({time: e.time, value: e.value - e26[i].value}));
-            const sig = calcEMA(m, 9);
-            h.setData(m.map((v,i)=>({time: v.time, value: v.value - (sig[i]?.value || 0), color: (v.value-(sig[i]?.value||0))>=0?'#26a69a':'#ef5350'})));
-            l1.setData(m); l2.setData(sig); pane.series.push(h, l1, l2);
+            const macdData = calcMACD(data, params.macdFast || 12, params.macdSlow || 26, params.macdSignal || 9);
+            h.setData(macdData.map(item => ({
+                time: item.time,
+                value: item.histogram,
+                color: item.histogramColor
+            })));
+            l1.setData(macdData.map(item => ({ time: item.time, value: item.macd })));
+            l2.setData(macdData.map(item => ({ time: item.time, value: item.signal })));
+            pane.series.push(h, l1, l2);
         }
         window.onresize(); syncAll(chartMain);
     }
@@ -571,38 +588,108 @@ window.onresize();
 // Открыть/закрыть панель настроек
 window.toggleSettings = function() {
     const panel = document.getElementById('settings-panel');
-    if (panel) {
-        panel.classList.toggle('open');
-        const isOpen = panel.classList.contains('open');
-        addLog(isOpen ? 'Панель настроек открыта' : 'Панель настроек закрыта');
-    } else {
+    if (!panel) {
         addLog('Ошибка: панель настроек не найдена в toggleSettings');
+        return;
     }
+
+    panel.classList.toggle('open');
 };
 
-
-
-
 // Навигация по маркерам с поддержкой 'first' и 'last'
+function getVisibleLogicalRangeSafe() {
+    return chartMain.timeScale().getVisibleLogicalRange();
+}
+
+function findNearestMarkerIndexByCenter() {
+    if (!window.MARKER_TIMESTAMPS || window.MARKER_TIMESTAMPS.length === 0) {
+        return -1;
+    }
+
+    const visibleRange = getVisibleLogicalRangeSafe();
+    if (!visibleRange || !data || data.length === 0) {
+        return Math.max(0, Math.min(curM, window.MARKER_TIMESTAMPS.length - 1));
+    }
+
+    const centerLogical = (visibleRange.from + visibleRange.to) / 2;
+    const centerIndex = Math.max(0, Math.min(data.length - 1, Math.round(centerLogical)));
+    const centerTime = data[centerIndex].time;
+
+    let nearestIndex = 0;
+    let nearestDistance = Infinity;
+    for (let i = 0; i < window.MARKER_TIMESTAMPS.length; i++) {
+        const distance = Math.abs(window.MARKER_TIMESTAMPS[i] - centerTime);
+        if (distance < nearestDistance) {
+            nearestDistance = distance;
+            nearestIndex = i;
+        }
+    }
+
+    return nearestIndex;
+}
+
+function centerOnDataIndexPreserveScale(targetIndex) {
+    const ts = chartMain.timeScale();
+    const visibleRange = getVisibleLogicalRangeSafe();
+    if (!visibleRange) {
+        return false;
+    }
+
+    const span = visibleRange.to - visibleRange.from;
+    const halfSpan = span / 2;
+    let from = targetIndex - halfSpan;
+    let to = targetIndex + halfSpan;
+
+    if (from < 0) {
+        to -= from;
+        from = 0;
+    }
+
+    const maxIndex = Math.max(0, data.length - 1);
+    if (to > maxIndex) {
+        const shift = to - maxIndex;
+        from = Math.max(0, from - shift);
+        to = maxIndex;
+    }
+
+    ts.setVisibleLogicalRange({ from, to });
+    return true;
+}
+
 window.changeMarker = function(dir) {
     if (!window.MARKER_TIMESTAMPS || window.MARKER_TIMESTAMPS.length === 0) {
         addLog('Нет маркеров для навигации');
         return;
     }
+
+    const markersCount = window.MARKER_TIMESTAMPS.length;
+    const baseIndex = findNearestMarkerIndexByCenter();
+
     if (dir === 'first') {
         curM = 0;
     } else if (dir === 'last') {
-        curM = window.MARKER_TIMESTAMPS.length - 1;
+        curM = markersCount - 1;
     } else if (typeof dir === 'number') {
-        curM = (curM + dir + window.MARKER_TIMESTAMPS.length) % window.MARKER_TIMESTAMPS.length;
+        curM = (baseIndex + dir + markersCount) % markersCount;
     } else {
         addLog('Неизвестное направление навигации');
         return;
     }
+
     window.curM = curM;
-    const ts = window.MARKER_TIMESTAMPS[curM];
-    // Центрировать график на маркере с небольшим отступом
-    chartMain.timeScale().setVisibleRange({ from: ts - 3600, to: ts + 3600 });
+    const markerTime = window.MARKER_TIMESTAMPS[curM];
+    const markerDataIndex = data.findIndex(candle => candle.time === markerTime);
+
+    if (markerDataIndex === -1) {
+        addLog('Маркер не найден в текущих данных');
+        return;
+    }
+
+    if (!centerOnDataIndexPreserveScale(markerDataIndex)) {
+        addLog('Не удалось выполнить переход без изменения масштаба');
+        return;
+    }
+
     addLog(`Переход к маркеру ${curM + 1} из ${window.MARKER_TIMESTAMPS.length}`);
 };
 // Переход к началу графика (сохраняет текущий масштаб)
@@ -614,13 +701,7 @@ window.navigateToStart = function() {
     const ts = chartMain.timeScale();
     const visibleRange = ts.getVisibleLogicalRange();
     if (!visibleRange) {
-        // Если диапазон не определён, показываем первые 50 свечей
-        const visibleBars = 50;
-        const endIndex = Math.min(visibleBars, data.length - 1);
-        const startTime = data[0].time;
-        const endTime = data[endIndex].time;
-        ts.setVisibleRange({ from: startTime, to: endTime });
-        addLog('Переход к началу графика (масштаб по умолчанию)');
+        addLog('Переход к началу невозможен: видимый диапазон не определён');
         return;
     }
     // Вычислить длину видимого диапазона в логических единицах (индексах свечей)
@@ -629,7 +710,7 @@ window.navigateToStart = function() {
     const newFrom = 0;
     const newTo = Math.min(length, data.length - 1);
     ts.setVisibleLogicalRange({ from: newFrom, to: newTo });
-    addLog('Переход к началу графика (масштаб сохранён)');
+    addLog('Переход к началу графика');
 };
 
 // Переход к концу графика (сохраняет текущий масштаб)
@@ -641,13 +722,7 @@ window.navigateToEnd = function() {
     const ts = chartMain.timeScale();
     const visibleRange = ts.getVisibleLogicalRange();
     if (!visibleRange) {
-        // Если диапазон не определён, показываем последние 50 свечей
-        const visibleBars = 50;
-        const startIndex = Math.max(0, data.length - visibleBars);
-        const startTime = data[startIndex].time;
-        const endTime = data[data.length - 1].time;
-        ts.setVisibleRange({ from: startTime, to: endTime });
-        addLog('Переход к концу графика (масштаб по умолчанию)');
+        addLog('Переход к концу невозможен: видимый диапазон не определён');
         return;
     }
     // Вычислить длину видимого диапазона в логических единицах
@@ -656,79 +731,77 @@ window.navigateToEnd = function() {
     const newTo = data.length - 1;
     const newFrom = Math.max(0, newTo - length);
     ts.setVisibleLogicalRange({ from: newFrom, to: newTo });
-    addLog('Переход к концу графика (масштаб сохранён)');
+    addLog('Переход к концу графика');
 };
 
 // Применить все настройки (индикаторы и стратегия) из новой панели с тремя окнами
+// Применить настройки из текущей панели стратегии
 window.applyAllSettings = function() {
-    addLog('Применение всех настроек...');
-    // 1. Настройки индикаторов (JSON из textarea)
-    const indicatorSettingsTextarea = document.getElementById('indicator-settings');
-    let rawSettings = {};
-    if (indicatorSettingsTextarea && indicatorSettingsTextarea.value.trim()) {
-        try {
-            rawSettings = JSON.parse(indicatorSettingsTextarea.value.trim());
-        } catch (e) {
-            addLog('Ошибка парсинга JSON настроек индикаторов: ' + e.message);
+    refreshActiveIndicators({ includeBalance: false });
+};
+
+function syncIndicatorSelectionFromStrategyParams() {
+    const strategyParams = window.Strategy && window.Strategy.params ? window.Strategy.params : {};
+    const map = {
+        SMA: Boolean(strategyParams.useSMA),
+        BB: Boolean(strategyParams.useBB),
+        MACD: Boolean(strategyParams.useMACD),
+        Stochastic: Boolean(strategyParams.useStochastic)
+    };
+
+    // Сначала отключаем все торговые индикаторы.
+    Object.keys(map).forEach(indicatorId => {
+        const checkbox = document.querySelector(`#indicator-menu input[data-id="${indicatorId}"]`);
+        if (checkbox) {
+            checkbox.checked = false;
+        }
+        window.toggleIndicator(indicatorId, false);
+    });
+
+    // Затем включаем только индикаторы, активированные в коде стратегии.
+    Object.entries(map).forEach(([indicatorId, isEnabled]) => {
+        if (!isEnabled) {
             return;
         }
-    } else {
-        // Если поле пустое, использовать значения по умолчанию
-        rawSettings = {
-            smaPeriod: 20,
-            bbPeriod: 20,
-            bbStdDev: 2,
-            macdFast: 12,
-            macdSlow: 26,
-            macdSignal: 9,
-            stochasticK: 14,
-            stochasticD: 3,
-            stochasticSlowing: 3
-        };
+
+        const checkbox = document.querySelector(`#indicator-menu input[data-id="${indicatorId}"]`);
+        if (checkbox) {
+            checkbox.checked = true;
+        }
+        window.toggleIndicator(indicatorId, true);
+    });
+}
+
+function refreshActiveIndicators(options = {}) {
+    const includeBalance = options.includeBalance !== false;
+    const checkboxes = document.querySelectorAll('#indicator-menu input[type="checkbox"]');
+    if (!checkboxes.length) {
+        return;
     }
 
-    // Преобразовать вложенный формат (sma.period) в плоский (smaPeriod)
-    const indicatorSettings = {};
-    if (rawSettings.sma && typeof rawSettings.sma === 'object') {
-        // Вложенный формат
-        if (rawSettings.sma.period !== undefined) indicatorSettings.smaPeriod = rawSettings.sma.period;
-        if (rawSettings.bb && rawSettings.bb.period !== undefined) indicatorSettings.bbPeriod = rawSettings.bb.period;
-        if (rawSettings.bb && rawSettings.bb.stdDev !== undefined) indicatorSettings.bbStdDev = rawSettings.bb.stdDev;
-        if (rawSettings.macd && rawSettings.macd.fast !== undefined) indicatorSettings.macdFast = rawSettings.macd.fast;
-        if (rawSettings.macd && rawSettings.macd.slow !== undefined) indicatorSettings.macdSlow = rawSettings.macd.slow;
-        if (rawSettings.macd && rawSettings.macd.signal !== undefined) indicatorSettings.macdSignal = rawSettings.macd.signal;
-        if (rawSettings.stochastic && rawSettings.stochastic.k !== undefined) indicatorSettings.stochasticK = rawSettings.stochastic.k;
-        if (rawSettings.stochastic && rawSettings.stochastic.d !== undefined) indicatorSettings.stochasticD = rawSettings.stochastic.d;
-        if (rawSettings.stochastic && rawSettings.stochastic.slowing !== undefined) indicatorSettings.stochasticSlowing = rawSettings.stochastic.slowing;
-    } else {
-        // Плоский формат (уже совместим)
-        Object.assign(indicatorSettings, rawSettings);
-    }
+    checkboxes.forEach(cb => {
+        if (!cb.checked) {
+            return;
+        }
 
-    // 2. Условие покупки
-    const buyConditionTextarea = document.getElementById('buy-condition');
-    const buyCondition = buyConditionTextarea ? buyConditionTextarea.value.trim() : '';
+        const indicatorId = cb.getAttribute('data-id');
+        if (!indicatorId) {
+            return;
+        }
 
-    // 3. Условие продажи
-    const sellConditionTextarea = document.getElementById('sell-condition');
-    const sellCondition = sellConditionTextarea ? sellConditionTextarea.value.trim() : '';
+        if (indicatorId === 'Balance') {
+            if (!includeBalance) {
+                return;
+            }
+            window.toggleBalance(true);
+            return;
+        }
 
-    if (window.Strategy && window.Strategy.applyIndicatorSettings && window.Strategy.applyStrategySettings) {
-        // Применить настройки индикаторов
-        window.Strategy.applyIndicatorSettings(indicatorSettings);
-        // Применить условия покупки и продажи (через applyStrategySettings)
-        window.Strategy.applyStrategySettings({
-            buyCondition: buyCondition,
-            sellCondition: sellCondition
-        });
-        addLog('Все настройки применены (индикаторы, условия покупки и продажи)');
-        // НЕ запускаем стратегию здесь, чтобы избежать рекурсии
-        // Обновить значения индикаторов под прицелом
-        updateIndicatorValues();
-    } else {
-        addLog('Ошибка: Strategy не загружен');
-    }
-};
+        window.toggleIndicator(indicatorId, true);
+    });
+
+    updateIndicatorValues();
+}
 // ==================== Управление кодом стратегии ====================
 
 /**
@@ -740,29 +813,20 @@ window.loadStrategyCode = function() {
         addLog('Ошибка: текстовое поле strategy-code-editor не найдено');
         return;
     }
-    // Получить содержимое window.StrategyCore (если оно есть) или загрузить через fetch
-    if (window.StrategyCore && window.StrategyCore.toString) {
-        // Если StrategyCore - объект, можно сериализовать его функции
-        let code = '';
-        for (const key in window.StrategyCore) {
-            if (typeof window.StrategyCore[key] === 'function') {
-                code += `// ${key}\n${window.StrategyCore[key].toString()}\n\n`;
-            }
-        }
-        if (code) {
-            editor.value = code;
-            addLog('Код стратегии загружен из window.StrategyCore');
-            updateStrategyCodeStatus('Код загружен из памяти', 'info');
-            return;
-        }
+    if (window.__strategyCoreSource) {
+        editor.value = window.__strategyCoreSource;
+        addLog('Код стратегии загружен из памяти');
+        updateStrategyCodeStatus('Код загружен из памяти', 'info');
+        return;
     }
-    // Иначе попробуем загрузить файл через fetch
+
     fetch('./strategy-core.js')
         .then(response => {
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             return response.text();
         })
         .then(text => {
+            window.__strategyCoreSource = text;
             editor.value = text;
             addLog('Код стратегии загружен из файла strategy-core.js');
             updateStrategyCodeStatus('Код загружен из файла', 'success');
@@ -788,30 +852,40 @@ window.applyStrategyCode = function() {
         updateStrategyCodeStatus('Код пуст', 'warning');
         return;
     }
+    const previousStrategyCore = window.StrategyCore ? { ...window.StrategyCore } : null;
+    const previousStrategyCoreSource = window.__strategyCoreSource;
     try {
-        // Сохраняем предыдущий StrategyCore для отката
-        const previousStrategyCore = window.StrategyCore ? { ...window.StrategyCore } : null;
         // Выполняем код в глобальной области видимости
         // Используем new Function для безопасного выполнения (без доступа к локальным переменным)
         const execute = new Function(code);
         execute();
         // Проверяем, что window.StrategyCore обновился (или создался)
         if (window.StrategyCore && typeof window.StrategyCore.createConditionContext === 'function') {
+            window.__strategyCoreSource = code;
             addLog('Код стратегии успешно применён');
-            updateStrategyCodeStatus('Код применён успешно', 'success');
             // Обновляем стратегию, если она использует StrategyCore
             if (window.Strategy && window.Strategy.updateFromCore) {
                 window.Strategy.updateFromCore();
             }
+
+            syncIndicatorSelectionFromStrategyParams();
+
+            if (window.Strategy && typeof window.Strategy.testStrategy === 'function') {
+                window.Strategy.testStrategy();
+                addLog('Перерисовка и пересчёт выполнены по Apply');
+            } else if (window.data && window.data.length > 0) {
+                refreshActiveIndicators();
+            }
         } else {
             // Если StrategyCore не определён, откатываем
             window.StrategyCore = previousStrategyCore;
+            window.__strategyCoreSource = previousStrategyCoreSource;
             addLog('Ошибка: после выполнения кода window.StrategyCore не определён');
-            updateStrategyCodeStatus('StrategyCore не определён', 'error');
         }
     } catch (err) {
+        window.StrategyCore = previousStrategyCore;
+        window.__strategyCoreSource = previousStrategyCoreSource;
         addLog('Ошибка выполнения кода стратегии: ' + err.message);
-        updateStrategyCodeStatus('Ошибка выполнения: ' + err.message, 'error');
     }
 };
 
@@ -830,13 +904,12 @@ window.resetStrategyCode = function() {
             return response.text();
         })
         .then(text => {
+            window.__strategyCoreSource = text;
             editor.value = text;
             addLog('Код стратегии сброшен к исходному файлу');
-            updateStrategyCodeStatus('Код сброшен', 'info');
         })
         .catch(err => {
             addLog('Не удалось загрузить исходный файл: ' + err.message);
-            updateStrategyCodeStatus('Ошибка загрузки', 'error');
         });
 };
 
@@ -844,14 +917,9 @@ window.resetStrategyCode = function() {
  * Обновляет статусную строку под редактором кода.
  */
 function updateStrategyCodeStatus(message, type) {
-    const statusEl = document.getElementById('strategy-code-status');
-    if (!statusEl) return;
-    statusEl.textContent = message;
-    statusEl.style.color =
-        type === 'success' ? '#4caf50' :
-        type === 'error' ? '#f44336' :
-        type === 'warning' ? '#ff9800' :
-        type === 'info' ? '#2196f3' : '#b2b5be';
+    // Лог статуса под редактором отключён по запросу.
+    void message;
+    void type;
 }
 
 // Автоматически загрузить код при открытии панели настроек
@@ -877,196 +945,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 
-// ==================== Модальное окно настроек индикаторов ====================
-
-/**
- * Открывает модальное окно настроек индикаторов и заполняет его текущими параметрами.
- */
-window.openIndicatorSettings = function() {
-    const modal = document.getElementById('indicator-settings-modal');
-    if (!modal) {
-        addLog('Ошибка: модальное окно не найдено');
-        return;
-    }
-    // Получить текущие параметры из Strategy
-    const params = window.Strategy?.params || {};
-    // Заполнить сетку параметров
-    const grid = document.getElementById('params-grid');
-    if (grid) {
-        grid.innerHTML = '';
-        // Список параметров с метками и типами
-        const paramDefs = [
-            { key: 'smaPeriod', label: 'Период SMA', type: 'number', min: 1, max: 200, step: 1 },
-            { key: 'bbPeriod', label: 'Период Bollinger Bands', type: 'number', min: 1, max: 200, step: 1 },
-            { key: 'bbStdDev', label: 'Стандартное отклонение BB', type: 'number', min: 0.5, max: 5, step: 0.1 },
-            { key: 'macdFast', label: 'MACD быстрый период', type: 'number', min: 1, max: 50, step: 1 },
-            { key: 'macdSlow', label: 'MACD медленный период', type: 'number', min: 1, max: 100, step: 1 },
-            { key: 'macdSignal', label: 'MACD сигнальный период', type: 'number', min: 1, max: 50, step: 1 },
-            { key: 'stochasticK', label: 'Stochastic %K период', type: 'number', min: 1, max: 50, step: 1 },
-            { key: 'stochasticD', label: 'Stochastic %D период', type: 'number', min: 1, max: 50, step: 1 },
-            { key: 'stochasticSlowing', label: 'Stochastic замедление', type: 'number', min: 1, max: 10, step: 1 },
-            { key: 'useMACD', label: 'Использовать MACD', type: 'checkbox' },
-            { key: 'useStochastic', label: 'Использовать Stochastic', type: 'checkbox' },
-            { key: 'useSMA', label: 'Использовать SMA', type: 'checkbox' },
-            { key: 'useBB', label: 'Использовать Bollinger Bands', type: 'checkbox' },
-            { key: 'overbought', label: 'Уровень перекупленности', type: 'number', min: 0, max: 100, step: 1 },
-            { key: 'oversold', label: 'Уровень перепроданности', type: 'number', min: 0, max: 100, step: 1 }
-        ];
-        paramDefs.forEach(def => {
-            const row = document.createElement('div');
-            row.className = 'param-row';
-            const label = document.createElement('label');
-            label.textContent = def.label;
-            const input = document.createElement('input');
-            input.type = def.type;
-            input.id = `modal-${def.key}`;
-            if (def.type === 'number') {
-                input.min = def.min;
-                input.max = def.max;
-                input.step = def.step || 1;
-                input.value = params[def.key] !== undefined ? params[def.key] : getDefaultValue(def.key);
-            } else if (def.type === 'checkbox') {
-                input.checked = params[def.key] !== undefined ? params[def.key] : getDefaultValue(def.key);
-            }
-            row.appendChild(label);
-            row.appendChild(input);
-            grid.appendChild(row);
-        });
-    }
-    // Заполнить пользовательское условие
-    const conditionTextarea = document.getElementById('custom-condition');
-    if (conditionTextarea) {
-        conditionTextarea.value = params.customCondition || '';
-    }
-    // Показать модальное окно
-    modal.classList.add('open');
-    addLog('Открыто окно настроек индикаторов');
-};
-
-/**
- * Возвращает значение по умолчанию для параметра.
- */
-function getDefaultValue(key) {
-    const defaults = {
-        smaPeriod: 20,
-        bbPeriod: 20,
-        bbStdDev: 2,
-        macdFast: 12,
-        macdSlow: 26,
-        macdSignal: 9,
-        stochasticK: 14,
-        stochasticD: 3,
-        stochasticSlowing: 3,
-        useMACD: true,
-        useStochastic: true,
-        useSMA: true,
-        useBB: true,
-        overbought: 85,
-        oversold: 15
-    };
-    return defaults[key] !== undefined ? defaults[key] : '';
-}
-
-/**
- * Закрывает модальное окно настроек индикаторов.
- */
-window.closeIndicatorSettings = function() {
-    const modal = document.getElementById('indicator-settings-modal');
-    if (modal) {
-        modal.classList.remove('open');
-        addLog('Окно настроек индикаторов закрыто');
-    }
-};
-
-/**
- * Применяет настройки из модального окна и обновляет Strategy.
- */
-window.applyIndicatorSettingsFromModal = function() {
-    const params = {};
-    // Собрать значения из полей ввода
-    const paramKeys = [
-        'smaPeriod', 'bbPeriod', 'bbStdDev', 'macdFast', 'macdSlow', 'macdSignal',
-        'stochasticK', 'stochasticD', 'stochasticSlowing',
-        'useMACD', 'useStochastic', 'useSMA', 'useBB',
-        'overbought', 'oversold'
-    ];
-    paramKeys.forEach(key => {
-        const input = document.getElementById(`modal-${key}`);
-        if (!input) return;
-        if (input.type === 'checkbox') {
-            params[key] = input.checked;
-        } else if (input.type === 'number') {
-            params[key] = parseFloat(input.value);
-        } else {
-            params[key] = input.value;
-        }
-    });
-    // Пользовательское условие
-    const conditionTextarea = document.getElementById('custom-condition');
-    if (conditionTextarea) {
-        params.customCondition = conditionTextarea.value.trim();
-    }
-    // Применить настройки к Strategy
-    if (window.Strategy && window.Strategy.applyIndicatorSettings && window.Strategy.applyStrategySettings) {
-        // Разделим параметры на индикаторные и стратегические (использование индикаторов)
-        const indicatorSettings = {
-            smaPeriod: params.smaPeriod,
-            bbPeriod: params.bbPeriod,
-            bbStdDev: params.bbStdDev,
-            macdFast: params.macdFast,
-            macdSlow: params.macdSlow,
-            macdSignal: params.macdSignal,
-            stochasticK: params.stochasticK,
-            stochasticD: params.stochasticD,
-            stochasticSlowing: params.stochasticSlowing
-        };
-        const strategySettings = {
-            useMACD: params.useMACD,
-            useStochastic: params.useStochastic,
-            useSMA: params.useSMA,
-            useBB: params.useBB,
-            overbought: params.overbought,
-            oversold: params.oversold,
-            customCondition: params.customCondition
-        };
-        window.Strategy.applyIndicatorSettings(indicatorSettings);
-        window.Strategy.applyStrategySettings(strategySettings);
-        addLog('Настройки индикаторов и стратегии применены из модального окна');
-        // Закрыть окно
-        window.closeIndicatorSettings();
-        // Перезапустить стратегию
-        window.Strategy.testStrategy();
-        // Обновить UI (значения индикаторов)
-        updateIndicatorValues();
-    } else {
-        addLog('Ошибка: Strategy не загружен');
-    }
-};
-
 // =============================================================================
-// Проверка наличия элементов панели настроек при загрузке
+// Обработчики UI при загрузке
 window.addEventListener('DOMContentLoaded', () => {
-    addLog('DOM loaded, checking settings panel elements...');
-    const panel = document.getElementById('settings-panel');
-    if (!panel) addLog('Ошибка: панель настроек не найдена');
-    else addLog('Панель настроек найдена');
-    const buyCondition = document.getElementById('buy-condition');
-    if (!buyCondition) addLog('Ошибка: текстовое поле buy-condition не найдено');
-    else addLog('Текстовое поле buy-condition найдено');
-    const sellCondition = document.getElementById('sell-condition');
-    if (!sellCondition) addLog('Ошибка: текстовое поле sell-condition не найдено');
-    else addLog('Текстовое поле sell-condition найдено');
-    const indicatorSettings = document.getElementById('indicator-settings');
-    if (!indicatorSettings) addLog('Ошибка: текстовое поле indicator-settings не найдено');
-    else addLog('Текстовое поле indicator-settings найдено');
-    const applyButton = document.querySelector('.settings-btn[onclick="applyAllSettings()"]');
-    if (!applyButton) addLog('Кнопка applyAllSettings не найдена (ожидаемо, так как она удалена)');
-    else addLog('Кнопка applyAllSettings найдена');
-    // Проверка функции toggleSettings
-    const toggleButton = document.getElementById('settings-toggle');
-    if (!toggleButton) addLog('Ошибка: кнопка settings-toggle не найдена');
-    else addLog('Кнопка settings-toggle найдена');
-
     // Обработка кликов для TF dropdown
     const tfDropdown = document.querySelector('#tf-btn + .dropdown');
     if (tfDropdown) {

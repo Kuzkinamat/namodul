@@ -2,7 +2,7 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <title>Namodul 0.1.1</title>
+    <title>Namodul 0.1.2</title>
     <meta charset="UTF-8">
     <link rel="stylesheet" href="style.css">
 
@@ -29,7 +29,7 @@
             </div>
         </div>
         <div class="menu-item">
-            <button id="source-btn" class="nav-btn" style="color: #2196f3;">SOURCE</button>
+            <button id="source-btn" class="nav-btn nav-btn-accent">SOURCE</button>
                 <div class="dropdown">
                 <div class="ind-row" onclick="setDataSource('none')">Clear</div>
                 <div class="ind-row" onclick="setDataSource('twelvedata')">Twelve Data API</div>
@@ -45,10 +45,10 @@
             <div class="dropdown" onclick="event.stopPropagation()">
                 <label class="ind-row"><input type="checkbox" data-id="SMA" onchange="toggleIndicator('SMA', this.checked)">SMA</label>
                 <label class="ind-row"><input type="checkbox" data-id="BB" onchange="toggleIndicator('BB', this.checked)">Bollinger Bands</label>
-                <hr style="border:0; border-top:1px solid #363c4e; margin: 10px 0;">
+                <hr class="menu-divider">
                 <label class="ind-row"><input type="checkbox" data-id="MACD" onchange="toggleIndicator('MACD', this.checked)">MACD</label>
                 <label class="ind-row"><input type="checkbox" data-id="Stochastic" onchange="toggleIndicator('Stochastic', this.checked)">Stochastic</label>
-                <hr style="border:0; border-top:1px solid #363c4e; margin: 10px 0;">
+                <hr class="menu-divider">
                 <label class="ind-row"><input type="checkbox" data-id="Balance" onchange="toggleBalance(this.checked)">Balance</label>
             </div>
         </div>
@@ -61,19 +61,17 @@
             <button class="nav-btn" onclick="changeMarker(1)">></button>
             <button class="nav-btn" onclick="navigateToEnd()">>></button>
         </div>
-        <div style="flex-grow: 1;"></div>
+        <div class="topbar-spacer"></div>
         <button class="nav-btn" onclick="toggleLog()">LOG</button>
     </div>
 
     <div id="settings-panel">
         <div class="settings-section">
-            <div style="display: flex; gap: 8px; margin-bottom: 10px;">
-                <button class="nav-btn" style="flex: 1; margin-top: 0; padding: 6px 10px; font-size: 11px;" onclick="resetStrategyCode()">Reset</button>
-                <button class="nav-btn" style="flex: 1; margin-top: 0; padding: 6px 10px; font-size: 11px;" onclick="applyStrategyCode()">Apply</button>
-                <button class="nav-btn" style="flex: 1; margin-top: 0; padding: 6px 10px; font-size: 11px;" onclick="window.Strategy.testStrategy()">Run</button>
+            <div class="strategy-actions">
+                <button class="nav-btn strategy-btn" onclick="resetStrategyCode()">Reset</button>
+                <button class="nav-btn strategy-btn" onclick="applyStrategyCode()">Apply</button>
             </div>
             <textarea class="code-editor" id="strategy-code-editor" placeholder="// Код из strategy-core.js будет загружен автоматически"></textarea>
-            <div id="strategy-code-status" style="font-size: 11px; margin-top: 8px; color: #b2b5be;"></div>
         </div>
     </div>
 
@@ -87,56 +85,6 @@
     <div id="log-panel">
         <div id="log-header" onclick="toggleLog()"></div>
         <div id="log-content"></div>
-    </div>
-    <!-- Модальное окно настроек индикаторов и стратегии -->
-    <div id="indicator-settings-modal" class="modal-overlay">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Настройки индикаторов и стратегии</h3>
-                <button class="modal-close" onclick="closeIndicatorSettings()">×</button>
-            </div>
-            <div class="params-grid" id="params-grid">
-                <!-- Параметры будут заполнены JavaScript -->
-            </div>
-            <div class="condition-editor">
-                <label for="custom-condition">Пользовательское условие (JavaScript):</label>
-                <textarea id="custom-condition" placeholder="Пример: indicator('macd').histogram > 0 && price('close') > indicator('sma').value"></textarea>
-                <div style="margin-top: 10px; display: flex; align-items: center; gap: 10px;">
-                    <select id="function-select" style="flex: 1; background: #131722; border: 1px solid #363c4e; color: #d1d4dc; padding: 6px; border-radius: 4px; font-size: 12px;">
-                        <option value="">-- Выберите функцию или переменную --</option>
-                        <optgroup label="Функции">
-                            <option value="indicator('macd')">indicator('macd')</option>
-                            <option value="indicator('sma')">indicator('sma')</option>
-                            <option value="indicator('bb')">indicator('bb')</option>
-                            <option value="indicator('stochastic')">indicator('stochastic')</option>
-                            <option value="price('close')">price('close')</option>
-                            <option value="price('open')">price('open')</option>
-                            <option value="price('high')">price('high')</option>
-                            <option value="price('low')">price('low')</option>
-                            <option value="dealStats(5)">dealStats(5)</option>
-                        </optgroup>
-                        <optgroup label="Переменные">
-                            <option value="i">i</option>
-                            <option value="data">data</option>
-                            <option value="indicators">indicators</option>
-                            <option value="tradeHistory">tradeHistory</option>
-                        </optgroup>
-                    </select>
-                    <button class="nav-btn" style="font-size: 12px; padding: 6px 12px;" onclick="insertSelectedFunction()">Вставить</button>
-                </div>
-                <div style="margin-top: 10px; display: flex; align-items: center; gap: 10px;">
-                    <button class="nav-btn" style="font-size: 12px; padding: 6px 12px; background: #4caf50;" onclick="testCondition()">Проверить условие</button>
-                    <div id="condition-test-result" style="font-size: 12px; color: #d1d4dc;"></div>
-                </div>
-                <div style="margin-top: 10px; font-size: 11px; color: #787b86;">
-                    Доступные функции: indicator(name, lag), price(type, lag), dealStats(window). Переменные: i, data, indicators, tradeHistory.
-                </div>
-            </div>
-            <div class="modal-actions">
-                <button class="nav-btn" onclick="closeIndicatorSettings()">Отмена</button>
-                <button class="nav-btn" style="background: #2196f3; color: white;" onclick="applyIndicatorSettingsFromModal()">Применить</button>
-            </div>
-        </div>
     </div>
     <script src="./lightweight-charts.standalone.production.js"></script>
     <script src="./prov-twelvedata.js"></script>

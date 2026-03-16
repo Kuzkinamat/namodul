@@ -1,166 +1,230 @@
 // strategy-core.js
-// Ядро стратегии: вычисления условий и сигналов
+// Минимальное ядро стратегии: только Bollinger Bands (вход при выходе за границы)
 
 window.StrategyCore = (function() {
     'use strict';
 
-    // Создать контекст для оценки условия
+    const DEFAULT_PARAMS = Object.freeze({
+        useBB: true,
+        bbPeriod: 20,
+        bbStdDev: 2,
+
+        // Управление сделкой
+        expirationMinutes: 5,
+
+        // Мартингейл
+        useMartingale: false,
+        martingaleMultiplier: 2,
+        martingaleMaxSteps: 3,
+
+        // Для совместимости с текущим UI/обвязкой
+        useMACD: false,
+        useStochastic: false,
+        useSMA: false,
+        customCondition: '',
+        buyCondition: '',
+        sellCondition: '',
+        filterTradingHours: false
+    });
+
+    function log(message) {
+        if (typeof window.addLog === 'function') {
+            window.addLog(message);
+        }
+    }
+
+    function getDefaultParams() {
+        return { ...DEFAULT_PARAMS };
+    }
+
+    function normalizeParams(params) {
+        return { ...DEFAULT_PARAMS, ...(params || {}) };
+    }
+
+    function calculateIndicators(data, params, options) {
+        const resolvedParams = normalizeParams(params);
+        const indicators = {
+            macd: [],
+            stochastic: [],
+            sma: [],
+            bb: []
+        };
+
+        if (!Array.isArray(data) || data.length === 0) {
+            return indicators;
+        }
+
+        const shouldCalcBB = (options && options.forceAll) ||
+            (options && Array.isArray(options.only) ? options.only.includes('bb') : resolvedParams.useBB);
+
+        if (!shouldCalcBB) {
+            return indicators;
+        }
+
+        if (typeof window.calcBB !== 'function') {
+            if (!(options && options.silent)) {
+                log('Ошибка: функция calcBB не найдена');
+            }
+            return null;
+        }
+
+        if (!(options && options.silent)) {
+            log('Расчет Bollinger Bands...');
+        }
+
+        const bb = window.calcBB(data, resolvedParams.bbPeriod, resolvedParams.bbStdDev);
+        if (!Array.isArray(bb) || bb.length !== data.length) {
+            if (!(options && options.silent)) {
+                const len = Array.isArray(bb) ? bb.length : 0;
+                log(`Ошибка: длина Bollinger Bands (${len}) не совпадает с данными (${data.length})`);
+            }
+            return null;
+        }
+
+        indicators.bb = bb;
+        return indicators;
+    }
+
+    function isTradingHour(timestamp) {
+        if (!timestamp) return false;
+
+        const ts = typeof timestamp === 'string' ? parseInt(timestamp, 10) : timestamp;
+        const date = new Date(ts * 1000);
+        const dayOfWeek = date.getUTCDay();
+        const hours = date.getUTCHours();
+
+        if (dayOfWeek >= 1 && dayOfWeek <= 4) return true;
+        if (dayOfWeek === 5 && hours < 21) return true;
+        if (dayOfWeek === 1 && hours >= 21) return true;
+
+        return false;
+    }
+
+    function enrichDataWithTradingHours(data) {
+        if (!Array.isArray(data)) {
+            return data;
+        }
+
+        return data.map(candle => ({
+            ...candle,
+            isTradingHour: isTradingHour(candle.time)
+        }));
+    }
+
     function createConditionContext(i, data, indicators, tradeHistory) {
-        const macdObj = indicators.macd && indicators.macd[i] ? indicators.macd[i] : { macd: null, signal: null, histogram: null };
-        const stochObj = indicators.stochastic && indicators.stochastic[i] ? indicators.stochastic[i] : { k: null, d: null };
-        const smaObj = indicators.sma && indicators.sma[i] ? indicators.sma[i] : { value: null };
         const bbObj = indicators.bb && indicators.bb[i] ? indicators.bb[i] : { upper: null, middle: null, lower: null };
         const candle = data[i] || { close: null, open: null, high: null, low: null };
 
         return {
-            i: i,
-            data: data,
-            indicators: indicators,
+            i,
+            data,
+            indicators,
             tradeHistory: tradeHistory || [],
-            macd: macdObj.macd,
-            signal: macdObj.signal,
-            histogram: macdObj.histogram,
-            stochasticK: stochObj.k,
-            stochasticD: stochObj.d,
-            sma: smaObj.value,
+
             bbUpper: bbObj.upper,
             bbMiddle: bbObj.middle,
             bbLower: bbObj.lower,
+
             close: candle.close,
             open: candle.open,
             high: candle.high,
             low: candle.low,
-            macdVal: macdObj.macd,
-            macdSignalVal: macdObj.signal,
-            macdHist: macdObj.histogram,
-            stochK: stochObj.k,
-            stochD: stochObj.d,
+
             indicator: function(name, lag = 0) {
                 const idx = i - lag;
                 if (idx < 0) return null;
-                const ind = indicators[name];
-                if (!ind || !ind[idx]) return null;
-                return ind[idx];
+                const series = indicators[name];
+                if (!series || !series[idx]) return null;
+                return series[idx];
             },
+
             price: function(type = 'close', lag = 0) {
                 const idx = i - lag;
                 if (idx < 0 || !data[idx]) return null;
                 return data[idx][type];
             },
-            dealStats: function(window) {
+
+            dealStats: function(windowSize) {
                 const history = tradeHistory || [];
-                if (!history || history.length === 0) {
+                if (!history.length) {
                     return { winCount: 0, lossCount: 0, totalProfit: 0, winRate: 0 };
                 }
-                const recent = history.slice(-window);
+                const recent = history.slice(-windowSize);
                 const winCount = recent.filter(d => d.result === 'win').length;
                 const lossCount = recent.filter(d => d.result === 'loss').length;
                 const totalProfit = recent.reduce((sum, d) => sum + (d.profit || 0), 0);
-                const winRate = recent.length > 0 ? winCount / recent.length : 0;
+                const winRate = recent.length ? winCount / recent.length : 0;
                 return { winCount, lossCount, totalProfit, winRate };
             }
         };
     }
 
-    // Оценить условие
     function evaluateCondition(condition, context) {
         if (!condition || condition.trim() === '') {
             return true;
         }
+
         try {
-            const func = new Function(...Object.keys(context), `return ${condition};`);
-            const result = func(...Object.values(context));
-            return Boolean(result);
+            const fn = new Function(...Object.keys(context), `return ${condition};`);
+            return Boolean(fn(...Object.values(context)));
         } catch (err) {
-            if (window.addLog) window.addLog('Ошибка выполнения условия: ' + err.message);
+            log('Ошибка выполнения условия: ' + err.message);
             return false;
         }
     }
 
-    // Вычислить сигналы на основе данных и параметров
-    function calculateSignals(data, params, indicators) {
-        // params: { useMACD, useStochastic, useSMA, useBB, overbought, oversold, buyCondition, sellCondition, ... }
-        // indicators: { macd, stochastic, sma, bb } - уже рассчитанные массивы
-        // Возвращает массив сигналов
+    function calculateSignals(data, params, indicators, tradeHistory) {
+        const resolvedParams = normalizeParams(params);
+        const resolvedIndicators = indicators || calculateIndicators(data, resolvedParams, { silent: true, forceAll: true });
+        if (!resolvedIndicators || !Array.isArray(data) || data.length < 2) {
+            return [];
+        }
+
+        const bb = resolvedIndicators.bb || [];
         const signals = [];
-        const debug = window.debugLog || false;
 
         for (let i = 1; i < data.length; i++) {
-            let longConditions = [];
-            let shortConditions = [];
-
-            if (params.useMACD && indicators.macd && indicators.macd.length > i) {
-                const prevMacd = indicators.macd[i - 1];
-                const currMacd = indicators.macd[i];
-                if (currMacd.macd !== null) {
-                    const macdAboveZero = currMacd.macd > 0;
-                    const macdHistogramRising = currMacd.histogram > prevMacd.histogram && prevMacd.histogram < 0;
-                    const macdBelowZero = currMacd.macd < 0;
-                    const macdHistogramFalling = currMacd.histogram < prevMacd.histogram && prevMacd.histogram > 0;
-                    longConditions.push(macdAboveZero || macdHistogramRising);
-                    shortConditions.push(macdBelowZero || macdHistogramFalling);
-                }
-            }
-
-            if (params.useStochastic && indicators.stochastic && indicators.stochastic.length > i) {
-                const prevStoch = indicators.stochastic[i - 1];
-                const currStoch = indicators.stochastic[i];
-                if (currStoch.k !== null && currStoch.d !== null) {
-                    const stochasticOversold = currStoch.k < params.oversold && currStoch.d < params.oversold;
-                    const stochasticCrossUp = prevStoch.k < prevStoch.d && currStoch.k > currStoch.d;
-                    const stochasticOverbought = currStoch.k > params.overbought && currStoch.d > params.overbought;
-                    const stochasticCrossDown = prevStoch.k > prevStoch.d && currStoch.k < currStoch.d;
-                    longConditions.push(stochasticOversold && stochasticCrossUp);
-                    shortConditions.push(stochasticOverbought && stochasticCrossDown);
-                }
-            }
-
-            if (params.useSMA && indicators.sma && indicators.sma.length > i && indicators.sma[i].value !== null) {
-                const price = data[i].close;
-                const sma = indicators.sma[i].value;
-                longConditions.push(price > sma);
-                shortConditions.push(price < sma);
-            }
-
-            if (params.useBB && indicators.bb && indicators.bb.length > i && indicators.bb[i].lower !== null && indicators.bb[i].upper !== null) {
-                const price = data[i].close;
-                const lower = indicators.bb[i].lower;
-                const upper = indicators.bb[i].upper;
-                longConditions.push(price <= lower);
-                shortConditions.push(price >= upper);
-            }
-
-            if (longConditions.length === 0 && shortConditions.length === 0) {
+            if (resolvedParams.filterTradingHours && data[i].isTradingHour === false) {
                 continue;
             }
 
-            const longSignal = longConditions.length > 0 && longConditions.every(c => c === true);
-            const shortSignal = shortConditions.length > 0 && shortConditions.every(c => c === true);
-
-            let buyConditionPass = true;
-            let sellConditionPass = true;
-            const buyCondition = params.buyCondition || params.customCondition;
-            const sellCondition = params.sellCondition || params.customCondition;
-            if (buyCondition && buyCondition.trim() !== '') {
-                const context = createConditionContext(i, data, indicators, []);
-                buyConditionPass = evaluateCondition(buyCondition, context);
-            }
-            if (sellCondition && sellCondition.trim() !== '') {
-                const context = createConditionContext(i, data, indicators, []);
-                sellConditionPass = evaluateCondition(sellCondition, context);
+            if (!bb[i] || !bb[i - 1] || bb[i].upper === null || bb[i].lower === null || bb[i - 1].upper === null || bb[i - 1].lower === null) {
+                continue;
             }
 
-            if (longSignal && buyConditionPass) {
+            const prevClose = data[i - 1].close;
+            const currClose = data[i].close;
+
+            const prevInside = prevClose <= bb[i - 1].upper && prevClose >= bb[i - 1].lower;
+            const breakoutDown = prevInside && currClose < bb[i].lower;
+            const breakoutUp = prevInside && currClose > bb[i].upper;
+
+            if (!breakoutDown && !breakoutUp) {
+                continue;
+            }
+
+            const context = createConditionContext(i, data, resolvedIndicators, tradeHistory || []);
+            const buyCondition = resolvedParams.buyCondition || resolvedParams.customCondition;
+            const sellCondition = resolvedParams.sellCondition || resolvedParams.customCondition;
+
+            const buyPass = breakoutDown && evaluateCondition(buyCondition, context);
+            const sellPass = breakoutUp && evaluateCondition(sellCondition, context);
+
+            if (buyPass) {
                 signals.push({
                     time: data[i].time,
                     type: 'buy',
-                    price: data[i].close
+                    price: currClose,
+                    bbUpper: bb[i].upper,
+                    bbLower: bb[i].lower
                 });
-            } else if (shortSignal && sellConditionPass) {
+            } else if (sellPass) {
                 signals.push({
                     time: data[i].time,
                     type: 'sell',
-                    price: data[i].close
+                    price: currClose,
+                    bbUpper: bb[i].upper,
+                    bbLower: bb[i].lower
                 });
             }
         }
@@ -168,10 +232,14 @@ window.StrategyCore = (function() {
         return signals;
     }
 
-    // Экспорт
     return {
+        getDefaultParams,
+        normalizeParams,
+        calculateIndicators,
         createConditionContext,
         evaluateCondition,
-        calculateSignals
+        calculateSignals,
+        isTradingHour,
+        enrichDataWithTradingHours
     };
 })();
