@@ -103,6 +103,38 @@
             flex: 1;
             margin-top: 0;
         }
+        .strategy-helper-row {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .strategy-target-row {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .strategy-helper-label {
+            font-size: 11px;
+            color: #9ea3b3;
+            min-width: 38px;
+        }
+        .strategy-helper-select {
+            background: #0a0c14;
+            border: 1px solid #363c4e;
+            color: #d1d4dc;
+            border-radius: 4px;
+            height: 28px;
+            min-width: 260px;
+            padding: 0 8px;
+            font-size: 12px;
+        }
+        .strategy-helper-btn {
+            height: 28px;
+            padding: 0 10px;
+            font-size: 11px;
+        }
         .menu-divider {
             border: 0;
             border-top: 1px solid #363c4e;

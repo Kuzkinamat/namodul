@@ -3,7 +3,7 @@ import socketserver
 import os
 
 # Устанавливаем порт
-PORT = 8000
+PORT = 80
 # Определяем рабочую директорию (папка, где лежит этот скрипт)
 DIRECTORY = os.path.dirname(os.path.abspath(__file__))
 

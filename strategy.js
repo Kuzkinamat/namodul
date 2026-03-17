@@ -13,20 +13,6 @@
         martingaleMultiplier: 2,
         martingaleMaxSteps: 3,
 
-        // Совместимость с текущим UI
-        useMACD: false,
-        useStochastic: false,
-        useSMA: false,
-        smaPeriod: 20,
-        macdFast: 12,
-        macdSlow: 26,
-        macdSignal: 9,
-        stochasticK: 14,
-        stochasticD: 3,
-        stochasticSlowing: 3,
-        overbought: 85,
-        oversold: 15,
-        customCondition: '',
         buyCondition: '',
         sellCondition: '',
         filterTradingHours: false
@@ -37,13 +23,7 @@
         'useMartingale',
         'martingaleMultiplier',
         'martingaleMaxSteps',
-        'useMACD',
-        'useStochastic',
-        'useSMA',
         'useBB',
-        'overbought',
-        'oversold',
-        'customCondition',
         'buyCondition',
         'sellCondition',
         'filterTradingHours'
@@ -51,14 +31,7 @@
 
     const INDICATOR_SETTING_KEYS = [
         'bbPeriod',
-        'bbStdDev',
-        'macdFast',
-        'macdSlow',
-        'macdSignal',
-        'stochasticK',
-        'stochasticD',
-        'stochasticSlowing',
-        'smaPeriod'
+        'bbStdDev'
     ];
 
     function log(message) {
