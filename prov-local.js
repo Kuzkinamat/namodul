@@ -170,7 +170,7 @@ window.LocalJsProvider = {
         // Если ничего не получилось, возвращаем пустой массив
         console.warn('Динамическое сканирование не удалось. Используется fallback список.');
         return [
-            { path: './EURUSD_M5_data.js', pair: 'EUR/USD', timeframe: '5m' }
+            { path: './data/EURUSD_M5_data.js', pair: 'EUR/USD', timeframe: '5m' }
         ];
     },
 
