@@ -5,7 +5,7 @@ let data = [];
 window.data = data; // expose globally
 let MARKER_TIMESTAMPS = [];
 window.MARKER_TIMESTAMPS = MARKER_TIMESTAMPS; // экспорт для strategy.js
-let currentRange = '1W', currentTimeframe = '1m', currentSource = 'none', currentPair = '', curM = 0, isSyncing = false;
+let currentRange = '1M', currentTimeframe = '5m', currentSource = 'none', currentPair = '', curM = 0, isSyncing = false;
 window.curM = curM; // экспорт для strategy.js
 const activePanes = {}, mainSeriesRefs = {};
 
@@ -224,6 +224,10 @@ window.setPair = async (p) => {
             if(cb.checked) window.toggleIndicator(cb.getAttribute('data-id'), true);
         });
         updateIndicatorValues();
+
+        // Re-apply full-range viewport after indicator refresh/sync side effects.
+        chartMain.timeScale().fitContent();
+
         addLog(`Loaded ${p}: ${data.length} candles (Range: ${currentRange}, TF: ${currentTimeframe})`);
     }
 };
@@ -548,15 +552,18 @@ window.onresize();
     
     // Use LocalJsProvider to scan available modules
     const datasets = window.LocalJsProvider ? await window.LocalJsProvider.scanModules() : [];
+    const defaultModuleSuffix = '/EURUSD_M5_data.js';
     let targetPair = 'EUR/USD';
-    let targetDataset = null;
-    
-    // Try to find EUR/USD dataset (any timeframe)
-    for (const ds of datasets) {
-        if (ds.pair === targetPair) {
-            targetDataset = ds;
-            break;
-        }
+    let targetDataset = datasets.find(ds => typeof ds.variable === 'string' && ds.variable.endsWith(defaultModuleSuffix)) || null;
+
+    // Fallback: EUR/USD on 5m
+    if (!targetDataset) {
+        targetDataset = datasets.find(ds => ds.pair === targetPair && ds.timeframe === '5m') || null;
+    }
+
+    // Fallback: EUR/USD on any timeframe
+    if (!targetDataset) {
+        targetDataset = datasets.find(ds => ds.pair === targetPair) || null;
     }
     // If not found, fallback to first dataset (if any)
     if (!targetDataset && datasets.length > 0) {
@@ -565,10 +572,11 @@ window.onresize();
     }
     
     if (targetDataset) {
-        const { pair, timeframe } = targetDataset;
-        
-        // Set timeframe UI
-        window.setTimeframe(timeframe);
+        const pair = targetDataset.pair;
+
+        // Force requested defaults
+        window.setRange('1M');
+        await window.setTimeframe('5m');
         
         // Set source to local
         await window.setDataSource('local');
@@ -579,7 +587,7 @@ window.onresize();
         // Set pair
         await window.setPair(pair);
         
-        addLog(`Auto‑loaded ${pair} (${timeframe}) from local data.`);
+        addLog(`Auto-loaded ${pair} (5m) from local data, range 1M.`);
     } else {
         // No local data, start with empty source
         window.setDataSource('none');

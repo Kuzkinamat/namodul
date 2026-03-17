@@ -236,7 +236,7 @@
         });
     }
 
-    function loadStrategyCode() {
+    function loadStrategyCode(options = {}) {
         const editor = document.getElementById('strategy-code-editor');
         if (!editor) {
             log('Ошибка: текстовое поле strategy-code-editor не найдено');
@@ -245,14 +245,19 @@
 
         const fileName = getSelectedEditorFile();
         const sourceCache = getSourceCache();
-        if (sourceCache[fileName]) {
+        const forceReload = options.forceReload === true;
+        if (!forceReload && sourceCache[fileName]) {
             editor.value = sourceCache[fileName];
             log('Код загружен из памяти: ' + fileName);
             updateStrategyCodeStatus('Код загружен из памяти', 'info');
             return;
         }
 
-        fetch('./' + fileName)
+        const sourceUrl = forceReload
+            ? ('./' + fileName + '?v=' + Date.now())
+            : ('./' + fileName);
+
+        fetch(sourceUrl, { cache: 'no-store' })
             .then(response => {
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 return response.text();
@@ -309,7 +314,18 @@
                 syncIndicatorSelectionFromStrategyParams();
 
                 if (window.Strategy && typeof window.Strategy.testStrategy === 'function') {
+                    const chart = window.chartMain;
+                    const ts = chart && typeof chart.timeScale === 'function' ? chart.timeScale() : null;
+                    const previousRange = ts && typeof ts.getVisibleLogicalRange === 'function'
+                        ? ts.getVisibleLogicalRange()
+                        : null;
+
                     window.Strategy.testStrategy();
+
+                    if (ts && previousRange && typeof ts.setVisibleLogicalRange === 'function') {
+                        ts.setVisibleLogicalRange(previousRange);
+                    }
+
                     log('Перерисовка и пересчёт выполнены по Apply');
                 } else if (window.data && window.data.length > 0) {
                     refreshActiveIndicators();
@@ -343,21 +359,9 @@
 
         const fileName = getSelectedEditorFile();
         const sourceCache = getSourceCache();
-
-        fetch('./' + fileName)
-            .then(response => {
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                return response.text();
-            })
-            .then(text => {
-                sourceCache[fileName] = text;
-                window.__strategyCoreSource = text;
-                editor.value = text;
-                log('Код сброшен к исходному файлу: ' + fileName);
-            })
-            .catch(err => {
-                log('Не удалось загрузить исходный файл ' + fileName + ': ' + err.message);
-            });
+        delete sourceCache[fileName];
+        loadStrategyCode({ forceReload: true });
+        log('Код сброшен к исходному файлу: ' + fileName);
     }
 
     function applyAllSettings() {
@@ -384,6 +388,7 @@
 
     document.addEventListener('DOMContentLoaded', function() {
         initHelperUi();
+        loadStrategyCode({ forceReload: true });
 
         setTimeout(function() {
             const panel = document.getElementById('settings-panel');
@@ -394,8 +399,7 @@
             const observer = new MutationObserver(function(mutations) {
                 mutations.forEach(function(mutation) {
                     if (mutation.attributeName === 'class' && panel.classList.contains('open')) {
-                        loadStrategyCode();
-                        observer.disconnect();
+                        loadStrategyCode({ forceReload: true });
                     }
                 });
             });

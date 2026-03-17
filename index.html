@@ -2,7 +2,7 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <title>Namodul 0.1.3</title>
+    <title>Namodul 0.1.4</title>
     <meta charset="UTF-8">
     <link rel="stylesheet" href="style.css">
 
@@ -10,7 +10,7 @@
 <body>
     <div id="topbar">
         <div class="menu-item">
-            <button id="range-btn" class="nav-btn">1W ▾</button>
+            <button id="range-btn" class="nav-btn">1M ▾</button>
             <div class="dropdown">
                 <div class="ind-row header">Range</div>
                 <div class="ind-row" onclick="setRange('1D')">1D</div>
@@ -20,7 +20,7 @@
             </div>
         </div>
         <div class="menu-item">
-            <button id="tf-btn" class="nav-btn">m1 ▾</button>
+            <button id="tf-btn" class="nav-btn">m5 ▾</button>
             <div class="dropdown">
                 <div class="ind-row header">TF</div>
                 <div class="ind-row" data-value="1m">m1</div>
@@ -70,21 +70,6 @@
             <div class="strategy-actions">
                 <button class="nav-btn strategy-btn" onclick="resetStrategyCode()">Reset</button>
                 <button class="nav-btn strategy-btn" onclick="applyStrategyCode()">Apply</button>
-            </div>
-            <div class="strategy-target-row">
-                <label for="strategy-editor-target" class="strategy-helper-label">Edit</label>
-                <select id="strategy-editor-target" class="strategy-helper-select" onchange="loadStrategyCode()">
-                    <option value="strategy-params.js" selected>Parameters and entry conditions</option>
-                    <option value="strategy-core.js">Core facade</option>
-                    <option value="strategy-core-context.js">Context helpers</option>
-                    <option value="strategy-core-signals.js">Signal logic</option>
-                </select>
-            </div>
-            <div class="strategy-helper-row">
-                <label for="strategy-helper-template" class="strategy-helper-label">Helper</label>
-                <select id="strategy-helper-template" class="strategy-helper-select"></select>
-                <button class="nav-btn strategy-helper-btn" onclick="strategyInsertTemplate()">Insert</button>
-                <button class="nav-btn strategy-helper-btn" onclick="strategyWrapSelection()">Wrap Selection</button>
             </div>
             <textarea class="code-editor" id="strategy-code-editor" placeholder="// Код из strategy-core.js будет загружен автоматически"></textarea>
         </div>
