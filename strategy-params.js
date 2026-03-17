@@ -1,21 +1,21 @@
 // strategy-params.js
-// Strategy parameters and entry conditions — edit this file per strategy.
+//m15
 
 window.StrategyParams = (function() {
     'use strict';
 
     const DEFAULT_PARAMS = Object.freeze({
         useBB: true,
-        bbPeriod: 20,
-        bbStdDev: 2,
+        bbPeriod: 60,
+        bbStdDev: 2.7,
 
         // Trade management
-        expirationMinutes: 5,
+        expirationMinutes: 15,
 
         // Martingale
-        useMartingale: false,
-        martingaleMultiplier: 2,
-        martingaleMaxSteps: 3,
+        useMartingale: 1,
+        martingaleMultiplier: 5,
+        martingaleMaxSteps: 1,
 
         // Entry conditions
         buyCondition: '',
