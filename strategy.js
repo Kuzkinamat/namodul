@@ -123,7 +123,6 @@
                 }
 
                 const signals = core.calculateSignals(data, this.params, indicators, this.tradeHistory);
-                log(`Рассчитано сигналов: ${signals.length}`);
                 return signals;
             } catch (error) {
                 log(`Ошибка расчета сигналов: ${error.message}`);
@@ -138,13 +137,11 @@
 
             if (series.markerPrimitive && typeof series.markerPrimitive.setMarkers === 'function') {
                 series.markerPrimitive.setMarkers([]);
-                log('Маркеры очищены (через markerPrimitive.setMarkers)');
             } else if (typeof series.setMarkers === 'function') {
                 series.setMarkers([]);
                 log('Маркеры очищены (setMarkers)');
             } else if (window.LightweightCharts && typeof window.LightweightCharts.createSeriesMarkers === 'function') {
                 window.LightweightCharts.createSeriesMarkers(series, []);
-                log('Маркеры очищены (createSeriesMarkers)');
             } else {
                 log('Не удалось очистить маркеры: нет подходящего метода');
             }
@@ -164,8 +161,6 @@
                 log('Нет сигналов для отображения');
                 return;
             }
-
-            log(`Добавление ${signals.length} маркеров на график`);
             const markers = signals.map(signal => ({
                 time: signal.time,
                 position: signal.type === 'buy' ? 'belowBar' : 'aboveBar',
@@ -182,10 +177,8 @@
             if (window.LightweightCharts && typeof window.LightweightCharts.createSeriesMarkers === 'function') {
                 if (series.markerPrimitive && typeof series.markerPrimitive.setMarkers === 'function') {
                     series.markerPrimitive.setMarkers(markers);
-                    log('Маркеры обновлены через markerPrimitive.setMarkers');
                 } else {
                     series.markerPrimitive = window.LightweightCharts.createSeriesMarkers(series, markers);
-                    log('Маркеры созданы через createSeriesMarkers (новый примитив)');
                 }
             } else if (typeof series.setMarkers === 'function') {
                 series.setMarkers(markers);
@@ -299,9 +292,6 @@
             }
 
             log(`Конечный баланс: ${currentBalance.toFixed(2)} (сделок: ${signals.length})`);
-            if (this.tradeHistory.length > 0) {
-                log(`История сделок обновлена, записей: ${this.tradeHistory.length}`);
-            }
             return balance;
         },
 
@@ -317,11 +307,7 @@
                 log('Предупреждение: функция applyAllSettings не найдена');
             }
 
-            log('Установка window.debugLog = true (текущее значение: ' + (window.debugLog ? 'true' : 'false') + ')');
-            window.debugLog = true;
-            log('Запуск теста стратегии с текущими настройками (отладка включена)...');
             const signals = this.calculateSignals(window.data);
-            log(`Найдено сигналов: ${signals.length}`);
 
             if (window.chartMain && window.candleSeries) {
                 this.clearSignals(window.chartMain, window.candleSeries);

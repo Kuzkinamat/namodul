@@ -86,6 +86,55 @@ window.onresize = () => {
     Object.values(activePanes).forEach(p => p.chart.resize(container.clientWidth, 130)); 
 };
 
+let hasAutoStartedStrategyOnFirstOpen = false;
+
+async function autoStartStrategyAndBalanceOnFirstOpen() {
+    if (hasAutoStartedStrategyOnFirstOpen) {
+        return;
+    }
+    if (!Array.isArray(window.data) || window.data.length === 0) {
+        addLog('Автозапуск стратегии пропущен: нет данных');
+        return;
+    }
+
+    const maxAttempts = 10;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        if (window.Strategy && typeof window.Strategy.testStrategy === 'function') {
+            hasAutoStartedStrategyOnFirstOpen = true;
+            window.Strategy.testStrategy();
+
+            const balanceCheckbox = document.querySelector('#indicator-menu input[data-id="Balance"]');
+            if (balanceCheckbox && !balanceCheckbox.checked) {
+                balanceCheckbox.checked = true;
+            }
+            if (typeof window.toggleBalance === 'function') {
+                window.toggleBalance(true);
+            }
+            return;
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
+    addLog('Автозапуск стратегии не выполнен: Strategy еще не готов');
+}
+
+function scheduleAutoStartStrategyAndBalanceOnFirstOpen() {
+    const run = () => {
+        autoStartStrategyAndBalanceOnFirstOpen().catch(err => {
+            addLog(`Ошибка автозапуска стратегии: ${err.message}`);
+        });
+    };
+
+    // Отложить тяжелый расчёт до первого кадра, чтобы интерфейс открылся быстрее.
+    if (typeof window.requestAnimationFrame === 'function') {
+        window.requestAnimationFrame(() => setTimeout(run, 0));
+        return;
+    }
+
+    setTimeout(run, 0);
+}
+
 window.toggleLog = () => { 
     document.getElementById('log-panel').classList.toggle('collapsed'); 
     setTimeout(window.onresize, 50); 
@@ -507,7 +556,6 @@ window.toggleBalance = function(isChecked) {
     pane.chart.timeScale().fitContent();
     window.onresize();
     syncAll(chartMain);
-    addLog('График баланса отображен');
 };
 
 // Обновить график баланса (если активен) на основе текущих сигналов
@@ -586,6 +634,9 @@ window.onresize();
         
         // Set pair
         await window.setPair(pair);
+
+        // On first open: defer strategy run until after first paint.
+        scheduleAutoStartStrategyAndBalanceOnFirstOpen();
         
         addLog(`Auto-loaded ${pair} (5m) from local data, range 1M.`);
     } else {

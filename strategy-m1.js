@@ -1,5 +1,5 @@
 // strategy-params.js
-//m5
+//m1
 
 window.StrategyParams = (function() {
     'use strict';
@@ -37,4 +37,3 @@ window.StrategyParams = (function() {
         normalizeParams
     };
 })();
-

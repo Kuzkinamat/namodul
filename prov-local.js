@@ -16,15 +16,11 @@ window.LocalJsProvider = {
         if (this._moduleCache[modulePath]) {
             return this._moduleCache[modulePath];
         }
+        await this._ensureKnownModules();
         try {
             const module = await import(modulePath);
-            // Отладочный вывод полного модуля
-            console.log('Module object keys:', Object.keys(module));
-            console.log('Module.default:', module.default);
             // Ожидаем, что модуль экспортирует default как массив свечей
             const data = module.default;
-            // Отладочный вывод
-            console.log('Loaded module:', modulePath, 'data type:', typeof data, 'isArray:', Array.isArray(data), 'data sample:', data ? data.slice(0,1) : null);
             if (!Array.isArray(data)) {
                 throw new Error(`Модуль ${modulePath} не экспортирует массив данных (тип: ${typeof data})`);
             }
@@ -185,39 +181,25 @@ window.LocalJsProvider = {
     },
 
     /**
-     * Сканирует все известные модули и возвращает массив datasets.
+     * Возвращает метаданные всех известных модулей без загрузки массивов свечей.
+     * Это важно для быстрого старта: тяжелые модули подгружаются только в fetchData.
      */
     async scanModules() {
         await this._ensureKnownModules();
-        console.log('Известные модули (_knownModules):', this._knownModules);
-        const datasets = [];
-        for (const mod of this._knownModules) {
-            try {
-                const cached = await this._loadModule(mod.path);
-                datasets.push({
-                    variable: mod.path,
-                    pair: cached.pair,
-                    timeframe: cached.timeframe,
-                    data: cached.data
-                });
-            } catch (err) {
-                // Пропустить модуль, который не загрузился
-                console.warn('Ошибка загрузки модуля', mod.path, err);
-                continue;
-            }
-        }
-        console.log('Загруженные datasets:', datasets.map(d => `${d.pair} (${d.timeframe})`));
-        // Также сканируем глобальные переменные для обратной совместимости (опционально)
-        // Можно оставить, но по требованию убираем.
-        return datasets;
+        return this._knownModules.map(mod => ({
+            variable: mod.path,
+            path: mod.path,
+            pair: mod.pair,
+            timeframe: mod.timeframe
+        }));
     },
 
     /**
      * Получить список доступных торговых пар (уникальные)
      */
     async getPairs() {
-        const datasets = await this.scanModules();
-        const pairs = [...new Set(datasets.map(d => d.pair))];
+        await this._ensureKnownModules();
+        const pairs = [...new Set(this._knownModules.map(d => d.pair))];
         return pairs;
     },
 
@@ -225,8 +207,8 @@ window.LocalJsProvider = {
      * Получить пары, отфильтрованные по таймфрейму (если таймфрейм выбран)
      */
     async getPairsByTimeframe(timeframe) {
-        const datasets = await this.scanModules();
-        const filtered = datasets.filter(d => d.timeframe === timeframe);
+        await this._ensureKnownModules();
+        const filtered = this._knownModules.filter(d => d.timeframe === timeframe);
         addLog(`Фильтрация по TF ${timeframe}: найдено ${filtered.length} наборов данных`);
         return filtered.map(d => d.pair);
     },
@@ -247,18 +229,14 @@ window.LocalJsProvider = {
      */
     async fetchData(range, timeframe, pair) {
         addLog(`Loading local data: ${pair}, Timeframe: ${timeframe}, Range: ${range}`);
-        const datasets = await this.scanModules();
-        // Логирование доступных наборов данных для отладки
-        if (datasets.length === 0) {
-            addLog(`No local data modules found.`);
-        } else {
-            addLog(`Available datasets: ${datasets.map(d => `${d.pair} (${d.timeframe})`).join(', ')}`);
-        }
-        const dataset = datasets.find(d => d.pair === pair && d.timeframe === timeframe);
-        if (!dataset) {
+        await this._ensureKnownModules();
+        const targetMeta = this._knownModules.find(d => d.pair === pair && d.timeframe === timeframe);
+        if (!targetMeta) {
             addLog(`No data for ${pair} - ${timeframe}`);
             throw new Error(`No local data found for ${pair} (TF: ${timeframe})`);
         }
+
+        const dataset = await this._loadModule(targetMeta.path);
         // Вычислить, сколько свечей нужно на основе диапазона и таймфрейма
         const outputSize = window.DataUtils.calculateOutputSize(range, timeframe);
         // Вернуть последние 'outputSize' свечей (или все, если набор меньше)
