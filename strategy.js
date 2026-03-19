@@ -5,9 +5,17 @@
     'use strict';
 
     const FALLBACK_PARAMS = {
+        useBB: true,
+        useMACD: true,
         bbPeriod: 20,
         bbStdDev: 2,
+        macdFast: 12,
+        macdSlow: 26,
+        macdSignal: 9,
+        flatWidthLookback: 20,
+        squeezeWidthFactor: 0.75,
         expirationMinutes: 5,
+        winPayout: 0.8,
         baseStake: 1,
         rules: '',
         filterTradingHours: false
@@ -15,6 +23,7 @@
 
     const STRATEGY_SETTING_KEYS = [
         'expirationMinutes',
+        'winPayout',
         'baseStake',
         'rules',
         'filterTradingHours'
@@ -22,7 +31,12 @@
 
     const INDICATOR_SETTING_KEYS = [
         'bbPeriod',
-        'bbStdDev'
+        'bbStdDev',
+        'macdFast',
+        'macdSlow',
+        'macdSignal',
+        'flatWidthLookback',
+        'squeezeWidthFactor'
     ];
 
     function log(message) {
@@ -179,8 +193,12 @@
             }
         },
 
-        calculatePnL: function(data, signals, initialDeposit = 100, tradeAmount = 1, winCoefficient = 0.8) {
+        calculatePnL: function(data, signals, initialDeposit = 100, tradeAmount = 1, winCoefficient = null, options = {}) {
             this.params = syncParams(this.params);
+            if (winCoefficient === null) {
+                winCoefficient = Number(this.params.winPayout ?? 0.8);
+            }
+            const shouldLogSummary = options.logSummary !== false;
             this.tradeHistory = [];
             window.tradeHistory = this.tradeHistory;
 
@@ -195,7 +213,9 @@
                     });
                 }
                 window.lastBalance = balance;
-                log(`Баланс (без сделок): ${currentBalance.toFixed(2)}`);
+                if (shouldLogSummary) {
+                    log(`Баланс (без сделок): ${currentBalance.toFixed(2)}`);
+                }
                 return balance;
             }
 
@@ -266,7 +286,13 @@
             }
 
             window.lastBalance = balance;
-            log(`Конечный баланс: ${currentBalance.toFixed(2)} (сделок: ${signals.length})`);
+            const totalTrades = this.tradeHistory.length;
+            const wins = this.tradeHistory.filter(t => t.result === 'win').length;
+            const losses = this.tradeHistory.filter(t => t.result === 'loss').length;
+            const winrate = totalTrades > 0 ? (wins / totalTrades) * 100 : 0;
+            if (shouldLogSummary) {
+                log(`Конечный баланс: ${currentBalance.toFixed(2)} (сделок: ${totalTrades}, win: ${wins}, loss: ${losses}, winrate: ${winrate.toFixed(2)}%)`);
+            }
             return balance;
         },
 
@@ -282,6 +308,7 @@
                 log('Предупреждение: функция applyAllSettings не найдена');
             }
 
+            log('Launch strategy ...');
             const signals = this.calculateSignals(window.data);
 
             if (window.chartMain && window.candleSeries) {
@@ -293,6 +320,10 @@
             }
 
             window.lastSignals = signals;
+
+            // Log strategy summary (including winrate) right after test run / Apply.
+            const winPayout = this.params?.winPayout ?? 0.8;
+            this.calculatePnL(window.data, signals, 100, 1, winPayout, { logSummary: true });
 
             if (typeof window.updateBalance === 'function') {
                 window.updateBalance();

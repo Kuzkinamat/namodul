@@ -41,6 +41,11 @@ window.exportData = function(format) {
  */
 window.exportIndicatorValues = function() {
     if (!window.currentIndicatorValues) {
+        if (typeof window.updateIndicatorValues === 'function') {
+            window.updateIndicatorValues({ force: true });
+        }
+    }
+    if (!window.currentIndicatorValues) {
         addLog('Нет значений индикаторов для экспорта');
         return;
     }

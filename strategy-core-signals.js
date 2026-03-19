@@ -19,10 +19,19 @@ window.StrategyCoreSignals = (function() {
         }
 
         const signals = [];
+        const expirationSeconds = (resolvedParams.expirationMinutes || 5) * 60;
 
         for (let i = 1; i < data.length; i++) {
             if (resolvedParams.filterTradingHours && data[i].isTradingHour === false) {
                 continue;
+            }
+
+            // Пропустить свечу, если со времени последнего сигнала ещё не истёк expirationMinutes
+            if (signals.length > 0) {
+                const lastSignalTime = signals[signals.length - 1].time;
+                if (data[i].time - lastSignalTime < expirationSeconds) {
+                    continue;
+                }
             }
 
             const context = contextModule.createConditionContext(i, data, resolvedIndicators, tradeHistory || []);

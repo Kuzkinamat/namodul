@@ -45,8 +45,21 @@ window.StrategyCoreContext = (function() {
 
         function ind(name, lag) {
             const idx = i + lag;
-            if (!indicators[name] || idx < 0) return null;
-            return indicators[name][idx] || null;
+            if (idx < 0) {
+                return name === 'bb' ? { upper: null, middle: null, lower: null } : null;
+            }
+
+            const series = indicators[name];
+            if (!series) {
+                return name === 'bb' ? { upper: null, middle: null, lower: null } : null;
+            }
+
+            const value = series[idx];
+            if (value) {
+                return value;
+            }
+
+            return name === 'bb' ? { upper: null, middle: null, lower: null } : null;
         }
 
         function bal(lag) {

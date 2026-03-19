@@ -281,8 +281,24 @@ window.setPair = async (p) => {
     }
 };
 
-function updateIndicatorValues() {
+function updateIndicatorValues(options = {}) {
     if (!data.length) return;
+
+    const indicatorValueFieldIds = [
+        'buy-macd-val',
+        'buy-signal-val',
+        'buy-histogram-val',
+        'sell-macd-val',
+        'sell-signal-val',
+        'sell-histogram-val',
+        'buy-stochasticK-val',
+        'buy-stochasticD-val',
+        'sell-stochasticK-val',
+        'sell-stochasticD-val'
+    ];
+    const hasIndicatorValueTargets = indicatorValueFieldIds.some(id => document.getElementById(id));
+    if (!options.force && !hasIndicatorValueTargets) return;
+
     const ts = chartMain.timeScale();
     const mainPane = document.getElementById('main-pane');
     const logicalIndex = ts.coordinateToLogical((mainPane.clientWidth - SCALE_WIDTH) / 2);
@@ -394,111 +410,33 @@ function syncAll(source) {
 
 chartMain.timeScale().subscribeVisibleLogicalRangeChange(() => syncAll(chartMain));
 
-function toLinePoint(time, value) {
-    return Number.isFinite(value) ? { time, value } : { time };
-}
-
-/**
- * Включает/выключает индикатор на графике.
- * Для индикаторов, отображаемых в отдельных панелях (Stochastic, MACD), создаёт отдельный чарт.
- * Для индикаторов на основном графике (SMA, BB) добавляет series поверх свечей.
- *
- * Важное замечание: чтобы синхронизация логических диапазонов работала правильно,
- * массивы данных индикаторов должны сохранять ту же длину и порядок, что и основной массив свечей.
- * Поэтому для периодов, где индикатор не определён, передаётся значение null (не фильтруется).
- * Это гарантирует, что логические индексы в syncAll остаются согласованными.
- */
+// Делегирует переключение/отрисовку индикаторов в IndicatorRenderers.
+// main.js сохраняет роль оркестратора и передаёт только контекст (данные, параметры, графики, callbacks).
 window.toggleIndicator = function(id, isChecked) {
-    if (!isChecked) {
-        if (mainSeriesRefs[id]) { mainSeriesRefs[id].forEach(s => chartMain.removeSeries(s)); delete mainSeriesRefs[id]; }
-        if (activePanes[id]) { activePanes[id].chart.remove(); document.getElementById(`wrapper-${id}`)?.remove(); delete activePanes[id]; }
-        return window.onresize();
-    }
-    if (!data.length) return;
-
     const coreDefaults = window.StrategyCore && typeof window.StrategyCore.getDefaultParams === 'function'
         ? window.StrategyCore.getDefaultParams()
         : {};
     const params = { ...coreDefaults, ...(window.Strategy?.params || {}) };
 
-    if (id === 'SMA' || id === 'BB') {
-        if (mainSeriesRefs[id]) mainSeriesRefs[id].forEach(s => chartMain.removeSeries(s));
-        mainSeriesRefs[id] = [];
-        if (id === 'SMA') {
-            const s = chartMain.addSeries(LightweightCharts.LineSeries, { color: '#ff00a6', lineWidth: 1, lastValueVisible: false, priceLineVisible: false });
-            const sma = window.calcSMA(data, params.smaPeriod || 20);
-            s.setData(sma.map(point => toLinePoint(point.time, point.value))); mainSeriesRefs[id].push(s);
-        }
-        if (id === 'BB') {
-            const bb = window.calcBB(data, params.bbPeriod || 20, params.bbStdDev || 2);
-            [{k:'t', c:'rgba(38,166,154,0.3)'}, {k:'m', c:'rgba(33,150,243,0.5)'}, {k:'b', c:'rgba(38,166,154,0.3)'}].forEach(o => {
-                const s = chartMain.addSeries(LightweightCharts.LineSeries, { color: o.c, lineWidth: 1, lastValueVisible: false, priceLineVisible: false });
-                const keyMap = { t: 'upper', m: 'middle', b: 'lower' };
-                s.setData(bb.map(v => toLinePoint(v.time, v[keyMap[o.k]]))); mainSeriesRefs[id].push(s);
-            });
-        }
-    } else {
-        // Log main data info for debugging
-        if (data.length > 0) {
-            addLog(`Main data length: ${data.length}`);
-            addLog(`First candle time: ${new Date(data[0].time * 1000).toISOString()}`);
-            addLog(`Last candle time: ${new Date(data[data.length - 1].time * 1000).toISOString()}`);
-        }
-        if (!activePanes[id]) {
-            const wr = document.createElement('div'); wr.id = `wrapper-${id}`; wr.className = 'pane-wrapper sub-pane'; wr.innerHTML = `<div class=\"v-line\"></div><div id=\"chart-${id}\" class=\"chart-container\"></div>`;
-            document.getElementById('panels-container').appendChild(wr);
-            const c = LightweightCharts.createChart(document.getElementById(`chart-${id}`), { ...chartOpts, timeScale: { visible: false } });
-            c.timeScale().subscribeVisibleLogicalRangeChange(() => syncAll(c));
-            activePanes[id] = { chart: c, series: [] };
-        }
-        const pane = activePanes[id];
-        pane.series.forEach(s => pane.chart.removeSeries(s)); pane.series = [];
-        if (id === 'Stochastic') {
-            const stochasticData = calcStochastic(data, params.stochasticK || 14, params.stochasticD || 3, params.stochasticSlowing || 3);
-            // Logging for debugging
-            addLog(`Stochastic data length: ${stochasticData.length}`);
-            // Log first 5 elements
-            for (let idx = 0; idx < Math.min(5, stochasticData.length); idx++) {
-                const d = stochasticData[idx];
-                addLog(`Stochastic[${idx}]: time=${new Date(d.time * 1000).toISOString()}, k=${d.k}, d=${d.d}`);
-            }
-            const nonNullK = stochasticData.filter(d => d.k !== null).length;
-            const nonNullD = stochasticData.filter(d => d.d !== null).length;
-            addLog(`Non-null K: ${nonNullK}, D: ${nonNullD}`);
-            if (nonNullK > 0) {
-                const firstK = stochasticData.find(d => d.k !== null);
-                const lastK = stochasticData.slice().reverse().find(d => d.k !== null);
-                addLog(`First K time: ${new Date(firstK.time * 1000).toISOString()}, value: ${firstK.k.toFixed(2)}`);
-                addLog(`Last K time: ${new Date(lastK.time * 1000).toISOString()}, value: ${lastK.k.toFixed(2)}`);
-            }
-            // Create line for %K - keep null values
-            const kLine = pane.chart.addSeries(LightweightCharts.LineSeries, { color: '#ff00a6', lineWidth: 1, lastValueVisible: false, priceLineVisible: false });
-            const kData = stochasticData.map(d => ({ time: d.time, value: d.k }));
-            kLine.setData(kData);
-            pane.series.push(kLine);
-            
-            // Create line for %D - keep null values
-            const dLine = pane.chart.addSeries(LightweightCharts.LineSeries, { color: '#2196f3', lineWidth: 1, lastValueVisible: false, priceLineVisible: false });
-            const dData = stochasticData.map(d => ({ time: d.time, value: d.d }));
-            dLine.setData(dData);
-            pane.series.push(dLine);
-        }
-        if (id === 'MACD') {
-            const h = pane.chart.addSeries(LightweightCharts.HistogramSeries, { lastValueVisible: false, priceLineVisible: false });
-            const l1 = pane.chart.addSeries(LightweightCharts.LineSeries, { color: '#2196f3', lineWidth: 1, lastValueVisible: false, priceLineVisible: false });
-            const l2 = pane.chart.addSeries(LightweightCharts.LineSeries, { color: '#ff9800', lineWidth:1, lastValueVisible: false, priceLineVisible: false });
-            const macdData = calcMACD(data, params.macdFast || 12, params.macdSlow || 26, params.macdSignal || 9);
-            h.setData(macdData.map(item => ({
-                time: item.time,
-                value: item.histogram,
-                color: item.histogramColor
-            })));
-            l1.setData(macdData.map(item => ({ time: item.time, value: item.macd })));
-            l2.setData(macdData.map(item => ({ time: item.time, value: item.signal })));
-            pane.series.push(h, l1, l2);
-        }
-        window.onresize(); syncAll(chartMain);
+    if (window.IndicatorRenderers && typeof window.IndicatorRenderers.toggleIndicator === 'function') {
+        window.IndicatorRenderers.toggleIndicator({
+            id,
+            isChecked,
+            data,
+            params,
+            chartMain,
+            chartOpts,
+            mainSeriesRefs,
+            activePanes,
+            syncAll,
+            onResize: window.onresize,
+            addLog,
+            LightweightCharts
+        });
+        return;
     }
+
+    addLog('IndicatorRenderers не инициализирован');
 };
 
 
@@ -520,7 +458,8 @@ window.toggleBalance = function(isChecked) {
         return;
     }
     // Рассчитать PnL (если сигналов нет, будет отображен постоянный баланс)
-    const balanceData = window.Strategy.calculatePnL(data, window.lastSignals || [], 100, 1, 0.8);
+    const winPayout = window.Strategy?.params?.winPayout ?? 0.8;
+    const balanceData = window.Strategy.calculatePnL(data, window.lastSignals || [], 100, 1, winPayout, { logSummary: false });
     if (!balanceData || balanceData.length === 0) {
         addLog('Не удалось рассчитать баланс');
         return;
@@ -569,7 +508,8 @@ window.updateBalance = function() {
         return;
     }
     // Рассчитать PnL (если сигналов нет, будет отображен постоянный баланс)
-    const balanceData = window.Strategy.calculatePnL(data, window.lastSignals || [], 100, 1, 0.8);
+    const winPayout = window.Strategy?.params?.winPayout ?? 0.8;
+    const balanceData = window.Strategy.calculatePnL(data, window.lastSignals || [], 100, 1, winPayout, { logSummary: false });
     if (!balanceData || balanceData.length === 0) {
         addLog('Не удалось рассчитать баланс');
         return;
@@ -635,8 +575,7 @@ window.onresize();
         // Set pair
         await window.setPair(pair);
 
-        // On first open: defer strategy run until after first paint.
-        scheduleAutoStartStrategyAndBalanceOnFirstOpen();
+        addLog('Автозапуск стратегии отключен. Запуск доступен вручную.');
         
         addLog(`Auto-loaded ${pair} (5m) from local data, range 1M.`);
     } else {
@@ -752,7 +691,55 @@ window.changeMarker = function(dir) {
     }
 
     addLog(`Переход к маркеру ${curM + 1} из ${window.MARKER_TIMESTAMPS.length}`);
+    logMarkerDetails(curM, markerTime, markerDataIndex);
 };
+
+function logMarkerDetails(markerIdx, markerTime, dataIndex) {
+    const signal = window.lastSignals && window.lastSignals[markerIdx];
+    const candle  = data && data[dataIndex];
+    const fmt     = (v, d = 5) => (v === null || v === undefined || !Number.isFinite(v)) ? '—' : v.toFixed(d);
+    const fmtTime = (ts) => ts ? new Date(ts * 1000).toISOString().replace('T', ' ').slice(0, 19) : '—';
+
+    const lines = [];
+    lines.push(`── Маркер ${markerIdx + 1}: ${fmtTime(markerTime)} ──`);
+
+    if (signal) {
+        lines.push(`  Сигнал : ${signal.type.toUpperCase()}  цена=${fmt(signal.price)}`);
+    }
+
+    if (candle) {
+        lines.push(`  Свеча  : O=${fmt(candle.open)} H=${fmt(candle.high)} L=${fmt(candle.low)} C=${fmt(candle.close)}`);
+    }
+
+    // BB на этой свече
+    const params = (window.StrategyCore && typeof window.StrategyCore.getDefaultParams === 'function')
+        ? { ...window.StrategyCore.getDefaultParams(), ...(window.Strategy?.params || {}) }
+        : (window.Strategy?.params || {});
+
+    if (window.StrategyCore && typeof window.StrategyCore.calculateIndicators === 'function' && data) {
+        const indicators = window.StrategyCore.calculateIndicators(data, params, { silent: true, forceAll: true });
+        if (indicators) {
+            const bb = indicators.bb && indicators.bb[dataIndex];
+            if (bb && bb.upper !== null) {
+                const half  = bb.upper - bb.middle;
+                const distU = bb.upper - candle.close;
+                const distL = candle.close - bb.lower;
+                lines.push(`  BB     : upper=${fmt(bb.upper)} mid=${fmt(bb.middle)} lower=${fmt(bb.lower)}`);
+                lines.push(`  Зазор  : до upper=${fmt(distU)} (${fmt(half > 0 ? distU / half * 100 : 0, 1)}%)  до lower=${fmt(distL)} (${fmt(half > 0 ? distL / half * 100 : 0, 1)}%)`);
+            }
+        }
+    }
+
+    // Сделка из tradeHistory с этим временем
+    const trade = window.Strategy && window.Strategy.tradeHistory &&
+        window.Strategy.tradeHistory.find(t => t.time === markerTime);
+    if (trade) {
+        lines.push(`  Сделка : ${trade.result.toUpperCase()}  +/${fmt(trade.profit, 2)}  exp=${trade.expiration}мин`);
+        lines.push(`  Входная цена=${fmt(trade.price)}  закрытие=${fmt(trade.closePrice)}  @${fmtTime(trade.closeTime)}`);
+    }
+
+    lines.forEach(l => addLog(l));
+}
 // Переход к началу графика (сохраняет текущий масштаб)
 window.navigateToStart = function() {
     if (!data || data.length === 0) {
