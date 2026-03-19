@@ -5,27 +5,18 @@
     'use strict';
 
     const FALLBACK_PARAMS = {
-        useBB: true,
         bbPeriod: 20,
         bbStdDev: 2,
         expirationMinutes: 5,
-        useMartingale: false,
-        martingaleMultiplier: 2,
-        martingaleMaxSteps: 3,
-
-        buyCondition: '',
-        sellCondition: '',
+        baseStake: 1,
+        rules: '',
         filterTradingHours: false
     };
 
     const STRATEGY_SETTING_KEYS = [
         'expirationMinutes',
-        'useMartingale',
-        'martingaleMultiplier',
-        'martingaleMaxSteps',
-        'useBB',
-        'buyCondition',
-        'sellCondition',
+        'baseStake',
+        'rules',
         'filterTradingHours'
     ];
 
@@ -203,20 +194,13 @@
                         value: currentBalance
                     });
                 }
+                window.lastBalance = balance;
                 log(`Баланс (без сделок): ${currentBalance.toFixed(2)}`);
                 return balance;
             }
 
             const expirationSeconds = this.getExpiration() * 60;
             const profitByCandleIndex = {};
-            const useMartingale = Boolean(this.params.useMartingale);
-            const martingaleMultiplier = Number(this.params.martingaleMultiplier) > 1 ? Number(this.params.martingaleMultiplier) : 2;
-            const martingaleMaxSteps = Number.isFinite(Number(this.params.martingaleMaxSteps))
-                ? Math.max(0, Math.floor(Number(this.params.martingaleMaxSteps)))
-                : 0;
-
-            let martingaleStep = 0;
-            let currentStake = tradeAmount;
 
             for (const signal of signals) {
                 const entryIndex = data.findIndex(candle => candle.time === signal.time);
@@ -249,7 +233,8 @@
                     isWin = closePrice < entryPrice;
                 }
 
-                const stake = currentStake;
+                const strength = signal.type === 'buy' ? signal.buyStrength : signal.sellStrength;
+                const stake = (this.params.baseStake || 1) * (strength ?? 1);
                 const profit = isWin ? stake * winCoefficient : -stake;
 
                 if (!profitByCandleIndex[closeIndex]) {
@@ -266,19 +251,8 @@
                     result: isWin ? 'win' : 'loss',
                     profit: profit,
                     stake,
-                    martingaleStep,
                     expiration: expirationSeconds / 60
                 });
-
-                if (useMartingale) {
-                    if (isWin) {
-                        martingaleStep = 0;
-                        currentStake = tradeAmount;
-                    } else {
-                        martingaleStep = Math.min(martingaleStep + 1, martingaleMaxSteps);
-                        currentStake = tradeAmount * Math.pow(martingaleMultiplier, martingaleStep);
-                    }
-                }
             }
 
             for (let i = 0; i < data.length; i++) {
@@ -291,6 +265,7 @@
                 });
             }
 
+            window.lastBalance = balance;
             log(`Конечный баланс: ${currentBalance.toFixed(2)} (сделок: ${signals.length})`);
             return balance;
         },

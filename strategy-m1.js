@@ -5,22 +5,24 @@ window.StrategyParams = (function() {
     'use strict';
 
     const DEFAULT_PARAMS = Object.freeze({
-        useBB: true,
-        bbPeriod: 60,
-        bbStdDev: 2.7,
+        bbPeriod:           60,
+        bbStdDev:           2.7,
+        expirationMinutes:  15,
+        baseStake:          1,
+        filterTradingHours: true,
 
-        // Trade management
-        expirationMinutes: 15,
+        rules: `// c(lag)        — свеча:      .open .high .low .close
+// ind(name,lag) — индикатор:  ind('bb',-1).upper / .middle / .lower
+// bal(lag)      — баланс:     число или null
 
-        // Martingale
-        useMartingale: 1,
-        martingaleMultiplier: 3,
-        martingaleMaxSteps: 5,
+if (c(-1).close >= ind('bb',-1).lower &&
+    c(-1).close <= ind('bb',-1).upper &&
+    c(0).close  <  ind('bb', 0).lower) buy  += 1;
 
-        // Entry conditions
-        buyCondition: '',
-        sellCondition: '',
-        filterTradingHours: true
+if (c(-1).close >= ind('bb',-1).lower &&
+    c(-1).close <= ind('bb',-1).upper &&
+    c(0).close  >  ind('bb', 0).upper) sell += 1;
+`
     });
 
     function getDefaultParams() {

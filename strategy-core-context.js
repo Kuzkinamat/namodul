@@ -37,6 +37,26 @@ window.StrategyCoreContext = (function() {
     }
 
     function createConditionContext(i, data, indicators, tradeHistory) {
+        function c(lag) {
+            const idx = i + lag;
+            if (idx < 0 || idx >= data.length) return null;
+            return data[idx];
+        }
+
+        function ind(name, lag) {
+            const idx = i + lag;
+            if (!indicators[name] || idx < 0) return null;
+            return indicators[name][idx] || null;
+        }
+
+        function bal(lag) {
+            const arr = window.lastBalance;
+            if (!arr) return null;
+            const idx = i + lag;
+            if (idx < 0 || idx >= arr.length) return null;
+            return arr[idx] ? arr[idx].value : null;
+        }
+
         const bbObj = indicators.bb && indicators.bb[i] ? indicators.bb[i] : { upper: null, middle: null, lower: null };
         const candle = data[i] || { close: null, open: null, high: null, low: null };
 
@@ -45,11 +65,13 @@ window.StrategyCoreContext = (function() {
             data,
             indicators,
             tradeHistory: tradeHistory || [],
-
+            c,
+            ind,
+            bal,
+            // legacy fields for backward compatibility
             bbUpper: bbObj.upper,
             bbMiddle: bbObj.middle,
             bbLower: bbObj.lower,
-
             close: candle.close,
             open: candle.open,
             high: candle.high,
@@ -98,11 +120,34 @@ window.StrategyCoreContext = (function() {
         }
     }
 
+    function evaluateRules(rulesCode, context) {
+        if (!rulesCode || rulesCode.trim() === '') {
+            return { buy: 0, sell: 0 };
+        }
+        try {
+            const fn = new Function('c', 'ind', 'bal',
+                `let buy = 0, sell = 0;\n${rulesCode}\nreturn { buy: Math.floor(buy), sell: Math.floor(sell) };`
+            );
+            const result = fn(context.c, context.ind, context.bal);
+            if (!result || typeof result !== 'object') {
+                return { buy: 0, sell: 0 };
+            }
+            return {
+                buy: Number.isFinite(result.buy) ? result.buy : 0,
+                sell: Number.isFinite(result.sell) ? result.sell : 0
+            };
+        } catch (err) {
+            log('Ошибка в rules: ' + err.message);
+            return { buy: 0, sell: 0 };
+        }
+    }
+
     return {
         log,
         isTradingHour,
         enrichDataWithTradingHours,
         createConditionContext,
-        evaluateCondition
+        evaluateCondition,
+        evaluateRules
     };
 })();
