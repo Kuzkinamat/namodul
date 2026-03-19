@@ -36,6 +36,9 @@ window.StrategyCore = (function() {
         evaluateCondition: function(conditionText, context) {
             return call('StrategyCoreContext', 'evaluateCondition', false, [conditionText, context]);
         },
+        evaluateRules: function(rulesCode, context) {
+            return call('StrategyCoreContext', 'evaluateRules', { buy: 0, sell: 0 }, [rulesCode, context]);
+        },
         calculateSignals: function(candles, params, indicators, history) {
             return call('StrategyCoreSignals', 'calculateSignals', [], [candles, params, indicators, history]);
         },

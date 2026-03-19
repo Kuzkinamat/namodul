@@ -1,5 +1,5 @@
 // strategy-core-signals.js
-// Signal generation for breakout entries using Bollinger Bands.
+// Signal generation using user-defined rules evaluated per candle.
 
 window.StrategyCoreSignals = (function() {
     'use strict';
@@ -18,7 +18,6 @@ window.StrategyCoreSignals = (function() {
             return [];
         }
 
-        const bb = resolvedIndicators.bb || [];
         const signals = [];
 
         for (let i = 1; i < data.length; i++) {
@@ -26,43 +25,24 @@ window.StrategyCoreSignals = (function() {
                 continue;
             }
 
-            if (!bb[i] || !bb[i - 1] || bb[i].upper === null || bb[i].lower === null || bb[i - 1].upper === null || bb[i - 1].lower === null) {
-                continue;
-            }
-
-            const prevClose = data[i - 1].close;
-            const currClose = data[i].close;
-
-            const prevInside = prevClose <= bb[i - 1].upper && prevClose >= bb[i - 1].lower;
-            const breakoutDown = prevInside && currClose < bb[i].lower;
-            const breakoutUp = prevInside && currClose > bb[i].upper;
-
-            if (!breakoutDown && !breakoutUp) {
-                continue;
-            }
-
             const context = contextModule.createConditionContext(i, data, resolvedIndicators, tradeHistory || []);
-            const buyCondition = resolvedParams.buyCondition;
-            const sellCondition = resolvedParams.sellCondition;
+            const { buy, sell } = contextModule.evaluateRules(resolvedParams.rules, context);
 
-            const buyPass = breakoutDown && contextModule.evaluateCondition(buyCondition, context);
-            const sellPass = breakoutUp && contextModule.evaluateCondition(sellCondition, context);
-
-            if (buyPass) {
+            if (buy >= 1) {
                 signals.push({
                     time: data[i].time,
                     type: 'buy',
-                    price: currClose,
-                    bbUpper: bb[i].upper,
-                    bbLower: bb[i].lower
+                    price: data[i].close,
+                    buyStrength: buy,
+                    sellStrength: 0
                 });
-            } else if (sellPass) {
+            } else if (sell >= 1) {
                 signals.push({
                     time: data[i].time,
                     type: 'sell',
-                    price: currClose,
-                    bbUpper: bb[i].upper,
-                    bbLower: bb[i].lower
+                    price: data[i].close,
+                    buyStrength: 0,
+                    sellStrength: sell
                 });
             }
         }
