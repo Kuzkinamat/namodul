@@ -70,6 +70,27 @@ window.StrategyCoreContext = (function() {
             return arr[idx] ? arr[idx].value : null;
         }
 
+        function lastLossWithinTf(tfCount = 2) {
+            const history = tradeHistory || [];
+            if (!history.length) return false;
+
+            const lastTrade = history[history.length - 1];
+            if (!lastTrade || lastTrade.result !== 'loss') return false;
+
+            const currentCandle = data[i];
+            if (!currentCandle || !Number.isFinite(currentCandle.time) || !Number.isFinite(lastTrade.closeTime)) {
+                return false;
+            }
+
+            const expirationMinutes = Number(
+                (window.Strategy && window.Strategy.params && window.Strategy.params.expirationMinutes) || 5
+            );
+            const windowSeconds = Math.max(1, expirationMinutes) * 60 * Math.max(1, Number(tfCount) || 1);
+            const dt = currentCandle.time - lastTrade.closeTime;
+
+            return dt > 0 && dt <= windowSeconds;
+        }
+
         const bbObj = indicators.bb && indicators.bb[i] ? indicators.bb[i] : { upper: null, middle: null, lower: null };
         const candle = data[i] || { close: null, open: null, high: null, low: null };
 
@@ -81,14 +102,7 @@ window.StrategyCoreContext = (function() {
             c,
             ind,
             bal,
-            // legacy fields for backward compatibility
-            bbUpper: bbObj.upper,
-            bbMiddle: bbObj.middle,
-            bbLower: bbObj.lower,
-            close: candle.close,
-            open: candle.open,
-            high: candle.high,
-            low: candle.low,
+            lastLossWithinTf,
 
             indicator: function(name, lag = 0) {
                 const idx = i - lag;
@@ -138,10 +152,19 @@ window.StrategyCoreContext = (function() {
             return { buy: 0, sell: 0 };
         }
         try {
-            const fn = new Function('c', 'ind', 'bal',
-                `let buy = 0, sell = 0;\n${rulesCode}\nreturn { buy: Math.floor(buy), sell: Math.floor(sell) };`
+            const safeDealStats = typeof context.dealStats === 'function'
+                ? context.dealStats
+                : function() {
+                    return { winCount: 0, lossCount: 0, totalProfit: 0, winRate: 0 };
+                };
+            const safeLastLossWithinTf = typeof context.lastLossWithinTf === 'function'
+                ? context.lastLossWithinTf
+                : function() { return false; };
+
+            const fn = new Function('c', 'ind', 'bal', 'dealStats', 'lastLossWithinTf',
+                `let buy = 0, sell = 0;\n${rulesCode}\nreturn { buy, sell };`
             );
-            const result = fn(context.c, context.ind, context.bal);
+            const result = fn(context.c, context.ind, context.bal, safeDealStats, safeLastLossWithinTf);
             if (!result || typeof result !== 'object') {
                 return { buy: 0, sell: 0 };
             }

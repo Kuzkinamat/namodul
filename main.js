@@ -42,8 +42,8 @@ window.DataUtils = {
             return 100; // fallback
         }
         const candles = Math.ceil(rangeMinutes / timeframeMinutes);
-        // Limit to API maximum (5000 for Twelve Data free plan)
-        const MAX_OUTPUTSIZE = 5000;
+        // Global cap to prevent excessive memory usage in chart rendering
+        const MAX_OUTPUTSIZE = 200000;
         return Math.min(candles, MAX_OUTPUTSIZE);
     },
     // Map timeframe to Twelve Data interval string (convert short format to API format)
@@ -527,7 +527,6 @@ window.updateBalance = function() {
     pane.series.push(series);
     pane.chart.timeScale().fitContent();
     syncAll(chartMain);
-    addLog('График баланса обновлен');
 };
 
 // Initialize with default values
@@ -596,7 +595,7 @@ window.toggleSettings = function() {
     panel.classList.toggle('open');
 };
 
-// Навигация по маркерам с поддержкой 'first' и 'last'
+// Навигация по маркерам
 function getVisibleLogicalRangeSafe() {
     return chartMain.timeScale().getVisibleLogicalRange();
 }

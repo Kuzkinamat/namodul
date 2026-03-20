@@ -166,13 +166,45 @@
                 log('Нет сигналов для отображения');
                 return;
             }
-            const markers = signals.map(signal => ({
-                time: signal.time,
-                position: signal.type === 'buy' ? 'belowBar' : 'aboveBar',
-                color: signal.type === 'buy' ? '#26a69a' : '#ef5350',
-                shape: signal.type === 'buy' ? 'arrowUp' : 'arrowDown',
-                text: signal.type === 'buy' ? 'BUY' : 'SELL'
-            }));
+
+            const baseStake = this.params.baseStake || 1;
+            
+            // Создаём map результатов сделок по времени и типу для быстрого поиска
+            const tradeResultMap = {};
+            if (this.tradeHistory && Array.isArray(this.tradeHistory)) {
+                for (const trade of this.tradeHistory) {
+                    const key = `${trade.time}_${trade.type}`;
+                    tradeResultMap[key] = trade.result; // 'win' или 'loss'
+                }
+            }
+
+            const markers = signals.map(signal => {
+                const strength = signal.type === 'buy' ? signal.buyStrength : signal.sellStrength;
+                const dealSize = baseStake * strength;
+                const dealSizeText = dealSize.toFixed(1);
+
+                // Определяем цвет маркера по результату сделки
+                const tradeKey = `${signal.time}_${signal.type}`;
+                const tradeResult = tradeResultMap[tradeKey];
+                
+                let markerColor;
+                if (tradeResult === 'win') {
+                    markerColor = '#90EE90'; // Зелёный для win
+                } else if (tradeResult === 'loss') {
+                    markerColor = '#FFD700'; // Жёлтый для loss
+                } else {
+                    // Если результат неизвестен, используем цвет по типу
+                    markerColor = signal.type === 'buy' ? '#26a69a' : '#ef5350';
+                }
+
+                return {
+                    time: signal.time,
+                    position: signal.type === 'buy' ? 'belowBar' : 'aboveBar',
+                    color: markerColor,
+                    shape: signal.type === 'buy' ? 'arrowUp' : 'arrowDown',
+                    text: dealSizeText
+                };
+            });
 
             if (window.MARKER_TIMESTAMPS) {
                 window.MARKER_TIMESTAMPS.splice(0, window.MARKER_TIMESTAMPS.length, ...signals.map(signal => signal.time));
@@ -302,32 +334,36 @@
                 return;
             }
 
-            if (typeof window.applyAllSettings === 'function') {
-                window.applyAllSettings();
-            } else {
-                log('Предупреждение: функция applyAllSettings не найдена');
-            }
-
             log('Launch strategy ...');
-            const signals = this.calculateSignals(window.data);
 
-            if (window.chartMain && window.candleSeries) {
-                this.clearSignals(window.chartMain, window.candleSeries);
-            }
+            // Даем UI отрисовать лог до тяжелых синхронных расчетов
+            setTimeout(() => {
+                if (typeof window.applyAllSettings === 'function') {
+                    window.applyAllSettings();
+                } else {
+                    log('Предупреждение: функция applyAllSettings не найдена');
+                }
+                const signals = this.calculateSignals(window.data);
 
-            if (window.chartMain && window.candleSeries) {
-                this.plotSignals(window.chartMain, window.candleSeries, signals);
-            }
+                window.lastSignals = signals;
 
-            window.lastSignals = signals;
+                // Рассчитываем PnL ПЕРЕД отображением маркеров, чтобы знать результаты сделок
+                const winPayout = this.params?.winPayout ?? 0.8;
+                this.calculatePnL(window.data, signals, 100, 1, winPayout, { logSummary: true });
 
-            // Log strategy summary (including winrate) right after test run / Apply.
-            const winPayout = this.params?.winPayout ?? 0.8;
-            this.calculatePnL(window.data, signals, 100, 1, winPayout, { logSummary: true });
+                // Теперь отображаем маркеры с информацией о результатах
+                if (window.chartMain && window.candleSeries) {
+                    this.clearSignals(window.chartMain, window.candleSeries);
+                }
 
-            if (typeof window.updateBalance === 'function') {
-                window.updateBalance();
-            }
+                if (window.chartMain && window.candleSeries) {
+                    this.plotSignals(window.chartMain, window.candleSeries, signals);
+                }
+
+                if (typeof window.updateBalance === 'function') {
+                    window.updateBalance();
+                }
+            }, 0);
         },
 
         setExpiration: function(minutes) {
@@ -356,9 +392,5 @@
             }
         },
 
-        updateFromCore: function() {
-            this.params = createDefaultParams();
-            log('StrategyCore обновлён, параметры загружены из нового ядра');
-        }
     };
 })();

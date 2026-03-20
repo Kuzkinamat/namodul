@@ -18,7 +18,7 @@ window.StrategyParams = (function() {
         rules: `// c(lag)        — свеча:      .open .high .low .close
 // ind(name,lag) — индикатор:  ind('bb',-1).upper / .middle / .lower
 // bal(lag)      — баланс:     число или null
-
+// dealStats(n)  — статистика последних n сделок
 // === BB (Флэт + Сжатие) ===
 // 1) Флэт: касание/пробой верхней BB -> PUT, нижней -> CALL
 // 2) Сжатие BB: при узких полосах торгуем ПРОБОЙ в сторону выхода
@@ -66,6 +66,13 @@ if (isSqueeze && (brokeUp || brokeDn)) {
 // 1) Режим флэта: отбой от границ BB
 if (isFlat && touchedLower) buy += 1;   // CALL от нижней полосы
 if (isFlat && touchedUpper) sell += 1;  // PUT от верхней полосы
+
+// 4) Мартингейл: если предыдущая сделка (до 2 TF) была убыточной,
+//    добавляем +1.3 к силе уже найденного сигнала
+if (typeof lastLossWithinTf === 'function' && lastLossWithinTf(2)) {
+    if (buy >= 1) buy += 1.3;
+    if (sell >= 1) sell += 1.3;
+}
 `
     });
 

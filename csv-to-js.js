@@ -24,7 +24,16 @@ const ENCODING = 'utf8';
 function parseCSVLine(line) {
     line = line.trim();
     if (!line || line.startsWith('#')) return null;
-    const parts = line.split(',');
+    let parts;
+    if (line.includes('\t')) {
+        parts = line.split('\t');
+    } else if (line.includes(';')) {
+        parts = line.split(';');
+    } else {
+        parts = line.split(',');
+    }
+
+    parts = parts.map(p => p.trim());
     if (parts.length !== 6) {
         console.warn(`Пропущена строка с неправильным количеством полей: ${line}`);
         return null;
@@ -115,7 +124,26 @@ export default ${JSON.stringify(candles, null, 2)};`;
  */
 async function main() {
     const dir = process.cwd();
-    const files = fs.readdirSync(dir).filter(f => f.endsWith(CSV_EXT));
+    const argPath = process.argv[2];
+    let files = [];
+
+    if (argPath) {
+        const resolved = path.isAbsolute(argPath) ? argPath : path.join(dir, argPath);
+        if (!fs.existsSync(resolved)) {
+            console.error(`Файл не найден: ${resolved}`);
+            process.exit(1);
+        }
+        if (!resolved.endsWith(CSV_EXT)) {
+            console.error(`Ожидался файл с расширением ${CSV_EXT}: ${resolved}`);
+            process.exit(1);
+        }
+        files = [resolved];
+    } else {
+        files = fs.readdirSync(dir)
+            .filter(f => f.endsWith(CSV_EXT))
+            .map(f => path.join(dir, f));
+    }
+
     if (files.length === 0) {
         console.log('CSV файлы не найдены в текущей директории.');
         return;
@@ -123,9 +151,9 @@ async function main() {
     console.log(`Найдено CSV файлов: ${files.length}`);
     for (const file of files) {
         try {
-            await convertCSV(path.join(dir, file));
+            await convertCSV(file);
         } catch (err) {
-            console.error(`Ошибка при обработке ${file}:`, err.message);
+            console.error(`Ошибка при обработке ${path.basename(file)}:`, err.message);
         }
     }
     console.log('Готово.');

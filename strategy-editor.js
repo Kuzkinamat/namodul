@@ -55,6 +55,31 @@
         return document.getElementById('strategy-code-editor');
     }
 
+    function syncSettingsPanelWidth() {
+        const panel = document.getElementById('settings-panel');
+        const editor = getEditor();
+        if (!panel || !editor) {
+            return;
+        }
+
+        if (!editor.dataset.widthInitialized) {
+            editor.style.width = Math.floor(window.innerWidth * 0.4) + 'px';
+            editor.dataset.widthInitialized = '1';
+        }
+
+        const panelStyles = window.getComputedStyle(panel);
+        const paddingLeft = parseFloat(panelStyles.paddingLeft) || 0;
+        const paddingRight = parseFloat(panelStyles.paddingRight) || 0;
+        const maxEditorWidth = Math.max(240, Math.floor(window.innerWidth - paddingLeft - paddingRight - 16));
+
+        if (editor.offsetWidth > maxEditorWidth) {
+            editor.style.width = maxEditorWidth + 'px';
+        }
+
+        const nextWidth = Math.ceil(editor.offsetWidth + paddingLeft + paddingRight);
+        panel.style.width = nextWidth + 'px';
+    }
+
     function getSelectedEditorFile() {
         return 'strategy-params.js';
     }
@@ -102,7 +127,6 @@
                 sourceCache[fileName] = text;
                 window.__strategyCoreSource = text;
                 editor.value = text;
-                log('Код загружен из файла: ' + fileName);
             })
             .catch(err => {
                 log('Не удалось загрузить файл ' + fileName + ': ' + err.message);
@@ -155,7 +179,6 @@
                         ts.setVisibleLogicalRange(previousRange);
                     }
 
-                    log('Перерисовка и пересчёт выполнены по Apply');
                 } else if (window.data && window.data.length > 0) {
                     refreshActiveIndicators();
                 }
@@ -182,7 +205,6 @@
         const sourceCache = getSourceCache();
         delete sourceCache[fileName];
         loadStrategyCode({ forceReload: true });
-        log('Код сброшен к исходному файлу: ' + fileName);
     }
 
     function applyAllSettings() {
@@ -205,6 +227,18 @@
 
     document.addEventListener('DOMContentLoaded', function() {
         loadStrategyCode({ forceReload: true });
+
+        syncSettingsPanelWidth();
+
+        const editor = getEditor();
+        if (editor && typeof window.ResizeObserver === 'function') {
+            const ro = new ResizeObserver(function() {
+                syncSettingsPanelWidth();
+            });
+            ro.observe(editor);
+        }
+
+        window.addEventListener('resize', syncSettingsPanelWidth);
 
         setTimeout(function() {
             const panel = document.getElementById('settings-panel');

@@ -8,12 +8,6 @@ window.LocalJsProvider = {
     // Динамический список модулей, полученный сканированием папки data
     _knownModules: null, // будет заполнен при первом сканировании
 
-    _isFallbackModules(modules) {
-        if (!Array.isArray(modules) || modules.length !== 1) return false;
-        const m = modules[0] || {};
-        return m.path === './data/EURUSD_M5_data.js' && m.pair === 'EUR/USD' && m.timeframe === '5m';
-    },
-
     /**
      * Загружает модуль по пути и возвращает данные.
      * Использует динамический import().
@@ -184,11 +178,9 @@ window.LocalJsProvider = {
             addLog(`Directory listing failed: ${e.message}`);
         }
 
-        // Если ничего не получилось, возвращаем пустой массив
-        console.warn('Динамическое сканирование не удалось. Используется fallback список.');
-        return [
-            { path: './data/EURUSD_M5_data.js', pair: 'EUR/USD', timeframe: '5m' }
-        ];
+        // Если ничего не получилось, возвращаем пустой массив.
+        console.warn('Динамическое сканирование не удалось. Файлы локальных данных не найдены.');
+        return [];
     },
 
     /**
@@ -198,16 +190,6 @@ window.LocalJsProvider = {
         if (this._knownModules === null) {
             this._knownModules = await this._scanDataFolder();
             addLog(`Сканирование папки data: найдено ${this._knownModules.length} файлов данных.`);
-        }
-
-        // Самовосстановление: если застряли на fallback из 1 файла, пробуем пересканировать.
-        if (this._isFallbackModules(this._knownModules)) {
-            addLog('Detected fallback dataset, rescanning data folder...');
-            const rescanned = await this._scanDataFolder();
-            if (Array.isArray(rescanned) && rescanned.length > this._knownModules.length) {
-                this._knownModules = rescanned;
-                addLog(`Rescan success: найдено ${this._knownModules.length} файлов данных.`);
-            }
         }
     },
 
