@@ -8,6 +8,12 @@ window.LocalJsProvider = {
     // Динамический список модулей, полученный сканированием папки data
     _knownModules: null, // будет заполнен при первом сканировании
 
+    _isFallbackModules(modules) {
+        if (!Array.isArray(modules) || modules.length !== 1) return false;
+        const m = modules[0] || {};
+        return m.path === './data/EURUSD_M5_data.js' && m.pair === 'EUR/USD' && m.timeframe === '5m';
+    },
+
     /**
      * Загружает модуль по пути и возвращает данные.
      * Использует динамический import().
@@ -97,7 +103,7 @@ window.LocalJsProvider = {
     async _scanDataFolder() {
         // Пробуем загрузить index.json
         try {
-            const response = await fetch('data/index.json');
+            const response = await fetch('data/index.json', { cache: 'no-store' });
             if (response.ok) {
                 const index = await response.json();
                 // Ожидаем массив объектов с полями filename, pair, timeframe
@@ -121,27 +127,35 @@ window.LocalJsProvider = {
                         }
                     });
                     console.log('Сканирование через index.json: найдено', modules.length, 'файлов', modules);
+                    addLog(`Index manifest loaded: ${modules.length} data files.`);
                     return modules;
                 }
+                addLog('Index manifest is not an array, trying directory listing.');
             }
+            addLog(`Index manifest unavailable (HTTP ${response.status}), trying directory listing.`);
         } catch (e) {
             // index.json не найден или ошибка сети
             console.warn('Не удалось загрузить data/index.json:', e.message);
+            addLog(`Index manifest failed: ${e.message}`);
         }
 
         // Пробуем получить листинг директории data/
         try {
-            const response = await fetch('data/');
+            const response = await fetch('data/', { cache: 'no-store' });
             if (response.ok) {
                 const html = await response.text();
                 console.log('HTML листинга data/ (первые 2000 символов):', html.substring(0, 2000));
                 // Парсим HTML листинга (простой regex для ссылок на файлы)
-                const matches = html.match(/href="([^"]*_data\.js)"/g);
+                const matches = [...html.matchAll(/href\s*=\s*["']([^"']*_data\.js(?:\?[^"']*)?)["']/gi)];
                 if (matches) {
-                    const files = matches.map(m => m.replace('href="', '').replace('"', ''));
+                    const files = matches.map(m => m[1]);
                     console.log('Все ссылки на _data.js:', files);
                     // Фильтруем только файлы _data.js
-                    const dataFiles = files.filter(f => f.endsWith('_data.js') && !f.includes('?'));
+                    const dataFiles = [...new Set(files
+                        .map(f => f.split('?')[0])
+                        .map(f => f.split('/').pop())
+                        .filter(f => f && f.endsWith('_data.js'))
+                    )];
                     console.log('Отфильтрованные файлы данных:', dataFiles);
                     const modules = dataFiles.map(filename => {
                         const basename = filename.replace('_data.js', '');
@@ -152,15 +166,22 @@ window.LocalJsProvider = {
                         };
                     });
                     console.log('Сформированные модули:', modules);
-                    return modules;
+                    if (modules.length > 0) {
+                        addLog(`Directory listing loaded: ${modules.length} data files.`);
+                        return modules;
+                    }
+                    addLog('Directory listing parsed but no data files found.');
                 } else {
                     console.warn('Не найдено ссылок на _data.js в HTML листинга');
+                    addLog('Directory listing has no links to *_data.js files.');
                 }
             } else {
                 console.warn('Ответ от data/ не OK:', response.status, response.statusText);
+                addLog(`Directory listing unavailable (HTTP ${response.status}).`);
             }
         } catch (e) {
             console.warn('Не удалось получить листинг папки data:', e.message);
+            addLog(`Directory listing failed: ${e.message}`);
         }
 
         // Если ничего не получилось, возвращаем пустой массив
@@ -177,6 +198,16 @@ window.LocalJsProvider = {
         if (this._knownModules === null) {
             this._knownModules = await this._scanDataFolder();
             addLog(`Сканирование папки data: найдено ${this._knownModules.length} файлов данных.`);
+        }
+
+        // Самовосстановление: если застряли на fallback из 1 файла, пробуем пересканировать.
+        if (this._isFallbackModules(this._knownModules)) {
+            addLog('Detected fallback dataset, rescanning data folder...');
+            const rescanned = await this._scanDataFolder();
+            if (Array.isArray(rescanned) && rescanned.length > this._knownModules.length) {
+                this._knownModules = rescanned;
+                addLog(`Rescan success: найдено ${this._knownModules.length} файлов данных.`);
+            }
         }
     },
 
