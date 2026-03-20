@@ -338,6 +338,14 @@
 
             // Даем UI отрисовать лог до тяжелых синхронных расчетов
             setTimeout(() => {
+                // Сохранить диапазон ДО любых операций, которые вызывают fitContent/syncAll
+                const _ts = window.chartMain && window.chartMain.timeScale
+                    ? window.chartMain.timeScale()
+                    : null;
+                const _savedRange = _ts && typeof _ts.getVisibleLogicalRange === 'function'
+                    ? _ts.getVisibleLogicalRange()
+                    : null;
+
                 if (typeof window.applyAllSettings === 'function') {
                     window.applyAllSettings();
                 } else {
@@ -362,6 +370,12 @@
 
                 if (typeof window.updateBalance === 'function') {
                     window.updateBalance();
+                }
+
+                // Восстановить диапазон: fitContent внутри updateBalance/applyAllSettings
+                // сбивает позицию через syncAll
+                if (_ts && _savedRange && typeof _ts.setVisibleLogicalRange === 'function') {
+                    _ts.setVisibleLogicalRange(_savedRange);
                 }
             }, 0);
         },
@@ -389,6 +403,17 @@
             this.params = syncParams(this.params);
             if (applyWhitelistedSettings(this.params, settings, INDICATOR_SETTING_KEYS)) {
                 log('Настройки индикаторов применены');
+            }
+        },
+
+        updateFromCore: function() {
+            // Синхронизировать params с последними значениями из StrategyCore/StrategyParams
+            // Это необходимо, чтобы новые значения индикаторов (bbPeriod, bbStdDev) 
+            // из переопределенного strategy-params.js были доступны для renderBB и других функций
+            const coreParams = createDefaultParams();
+            if (coreParams && typeof coreParams === 'object') {
+                this.params = { ...coreParams };
+                log('Параметры синхронизированы с StrategyCore');
             }
         },
 

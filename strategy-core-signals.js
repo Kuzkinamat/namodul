@@ -4,6 +4,14 @@
 window.StrategyCoreSignals = (function() {
     'use strict';
 
+    function createTimeIndexMap(data) {
+        const timeIndexMap = new Map();
+        for (let i = 0; i < data.length; i++) {
+            timeIndexMap.set(data[i].time, i);
+        }
+        return timeIndexMap;
+    }
+
     function findCloseIndex(data, entryIndex, closeTime) {
         for (let i = entryIndex; i < data.length; i++) {
             if (data[i].time >= closeTime) {
@@ -14,7 +22,7 @@ window.StrategyCoreSignals = (function() {
         return data.length - 1;
     }
 
-    function buildClosedTradeHistory(data, signals, currentIndex, expirationSeconds) {
+    function buildClosedTradeHistory(data, signals, currentIndex, expirationSeconds, timeIndexMap) {
         const history = [];
         const currentTime = data[currentIndex] ? data[currentIndex].time : null;
         if (!Number.isFinite(currentTime)) {
@@ -22,8 +30,8 @@ window.StrategyCoreSignals = (function() {
         }
 
         for (const signal of signals) {
-            const entryIndex = data.findIndex(candle => candle.time === signal.time);
-            if (entryIndex === -1) {
+            const entryIndex = timeIndexMap.get(signal.time);
+            if (entryIndex === undefined) {
                 continue;
             }
 
@@ -67,6 +75,7 @@ window.StrategyCoreSignals = (function() {
 
         const signals = [];
         const expirationSeconds = (resolvedParams.expirationMinutes || 5) * 60;
+        const timeIndexMap = createTimeIndexMap(data);
 
         for (let i = 1; i < data.length; i++) {
             if (resolvedParams.filterTradingHours && data[i].isTradingHour === false) {
@@ -81,12 +90,22 @@ window.StrategyCoreSignals = (function() {
                 }
             }
 
-            const localTradeHistory = buildClosedTradeHistory(data, signals, i, expirationSeconds);
+            const localTradeHistory = buildClosedTradeHistory(data, signals, i, expirationSeconds, timeIndexMap);
             const mergedTradeHistory = (tradeHistory || []).concat(localTradeHistory);
             const context = contextModule.createConditionContext(i, data, resolvedIndicators, mergedTradeHistory);
             const { buy, sell } = contextModule.evaluateRules(resolvedParams.rules, context);
             
-            if (buy >= 1) {
+            // Проверка фильтра по фазе рынка
+            let passedPhaseFilter = true;
+            if (resolvedParams.phaseFilter && resolvedParams.phaseFilter !== 'none' && 
+                resolvedIndicators.phase && Array.isArray(resolvedIndicators.phase.phase)) {
+                const currentPhase = resolvedIndicators.phase.phase[i];
+                if (typeof window.shouldTradeInPhase === 'function') {
+                    passedPhaseFilter = window.shouldTradeInPhase(currentPhase, resolvedParams.phaseFilter);
+                }
+            }
+            
+            if (buy >= 1 && passedPhaseFilter) {
                 signals.push({
                     time: data[i].time,
                     type: 'buy',
@@ -94,7 +113,7 @@ window.StrategyCoreSignals = (function() {
                     buyStrength: buy,
                     sellStrength: 0
                 });
-            } else if (sell >= 1) {
+            } else if (sell >= 1 && passedPhaseFilter) {
                 signals.push({
                     time: data[i].time,
                     type: 'sell',

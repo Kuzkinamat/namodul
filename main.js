@@ -83,8 +83,84 @@ window.onresize = () => {
     const container = document.getElementById('main-pane');
     if (!container) return;
     chartMain.resize(container.clientWidth, container.clientHeight); 
-    Object.values(activePanes).forEach(p => p.chart.resize(container.clientWidth, 130)); 
+    Object.entries(activePanes).forEach(([id, p]) => {
+        const wrapper = document.getElementById('wrapper-' + id);
+        const paneHeight = wrapper ? wrapper.clientHeight : 130;
+        p.chart.resize(container.clientWidth, paneHeight);
+    });
 };
+
+// Рисуем фазы как полосы
+let phaseRectanglesSeries = null;
+let lastPhaseRenderTime = {};
+
+function renderPhaseRectangles() {
+    if (!window.data || !window.data.length) return;
+
+    try {
+        const coreDefaults = window.StrategyCore && typeof window.StrategyCore.getDefaultParams === 'function'
+            ? window.StrategyCore.getDefaultParams()
+            : {};
+        const params = { ...coreDefaults, ...(window.Strategy?.params || {}) };
+        const indicators = window.StrategyCore && typeof window.StrategyCore.calculateIndicators === 'function'
+            ? window.StrategyCore.calculateIndicators(window.data, params, { forceAll: true, silent: true })
+            : null;
+
+        if (!indicators || !indicators.phase || !Array.isArray(indicators.phase.phase)) return;
+
+        const PHASE_COLORS = {
+            'squeeze': '#0088ff88',
+            'flat': '#00ff0044',
+            'trend_up': '#00ff0044',
+            'trend_down': '#ff444444',
+            'chaos': '#ffaa0044'
+        };
+
+        const shapes = [];
+        let startTime = null;
+        let currentPhase = null;
+
+        for (let i = 0; i < Math.min(indicators.phase.phase.length, window.data.length); i++) {
+            const phase = indicators.phase.phase[i];
+
+            if (phase !== currentPhase) {
+                if (currentPhase && startTime !== null) {
+                    // закончилась текущая фаза, добавим прямоугольник
+                    shapes.push({
+                        time: window.data[startTime].time,
+                        shape: [{
+                            type: 'background',
+                            timeRange: [window.data[startTime].time, window.data[i === 0 ? 0 : i - 1].time],
+                            color: PHASE_COLORS[currentPhase] || '#ffffff11'
+                        }]
+                    });
+                }
+                startTime = i;
+                currentPhase = phase;
+            }
+        }
+
+        // После цикла добавим последнюю фазу
+        if (currentPhase && startTime !== null) {
+            shapes.push({
+                time: window.data[startTime].time,
+                shape: [{
+                    type: 'background',
+                    timeRange: [window.data[startTime].time, window.data[window.data.length - 1].time],
+                    color: PHASE_COLORS[currentPhase] || '#ffffff11'
+                }]
+            });
+        }
+
+        // Lightweight Charts имеет встроенный способ для drawing shapes через логику
+        // Но это сложнее, чем просто увидеть фазы при наведении
+    } catch (e) {
+        // silently fail, don't spam logs
+    }
+}
+
+// Активируем рисование фаз при первой загрузке (опционально)
+// renderPhaseRectangles();
 
 let hasAutoStartedStrategyOnFirstOpen = false;
 
@@ -469,6 +545,7 @@ window.toggleBalance = function(isChecked) {
         const wr = document.createElement('div');
         wr.id = 'wrapper-Balance';
         wr.className = 'pane-wrapper sub-pane';
+        wr.style.height = '65px';
         wr.innerHTML = `<div class="v-line"></div><div id="chart-Balance" class="chart-container"></div>`;
         document.getElementById('panels-container').appendChild(wr);
         const chart = LightweightCharts.createChart(document.getElementById('chart-Balance'), {

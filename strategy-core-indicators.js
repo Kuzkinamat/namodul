@@ -16,7 +16,9 @@ window.StrategyCoreIndicators = (function() {
             macd: [],
             stochastic: [],
             sma: [],
-            bb: []
+            bb: [],
+            atr: [],
+            phase: { phase: [], confidence: [] }
         };
 
         if (!Array.isArray(data) || data.length === 0) {
@@ -28,6 +30,8 @@ window.StrategyCoreIndicators = (function() {
             (requestedOnly ? requestedOnly.includes('bb') : resolvedParams.useBB !== false);
         const shouldCalcMACD = (options && options.forceAll) ||
             (requestedOnly ? requestedOnly.includes('macd') : resolvedParams.useMACD === true);
+        const shouldCalcPhase = (options && options.forceAll) ||
+            (requestedOnly ? requestedOnly.includes('phase') : resolvedParams.usePhase !== false);
 
         if (shouldCalcBB) {
             if (typeof window.calcBB !== 'function') {
@@ -73,6 +77,36 @@ window.StrategyCoreIndicators = (function() {
                 return null;
             }
             indicators.macd = macd;
+        }
+
+        // Расчет фазы рынка (требует BB и ATR)
+        if (shouldCalcPhase) {
+            if (typeof window.calcATR !== 'function') {
+                if (!(options && options.silent)) {
+                    context.log('Ошибка: функция calcATR не найдена');
+                }
+                // Не возвращаем null, просто пропускаем фазу
+            } else if (!indicators.bb || indicators.bb.length === 0) {
+                if (!(options && options.silent)) {
+                    context.log('Ошибка: Bollinger Bands нужны для расчета фазы');
+                }
+            } else {
+                if (!(options && options.silent)) {
+                    context.log('Расчет фазы рынка...');
+                }
+
+                const atr = window.calcATR(data, 14);
+                indicators.atr = atr;
+
+                if (typeof window.calculatePhaseIndicator !== 'function') {
+                    if (!(options && options.silent)) {
+                        context.log('Ошибка: функция calculatePhaseIndicator не найдена');
+                    }
+                } else {
+                    const phase = window.calculatePhaseIndicator(data, indicators.bb, atr, 20, 30);
+                    indicators.phase = phase;
+                }
+            }
         }
 
         return indicators;

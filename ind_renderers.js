@@ -29,12 +29,20 @@ window.IndicatorRenderers = (function() {
         const wr = document.createElement('div');
         wr.id = 'wrapper-' + id;
         wr.className = 'pane-wrapper sub-pane';
+        if (id === 'Phase') {
+            wr.style.height = '65px';
+        }
         wr.innerHTML = '<div class="v-line"></div><div id="chart-' + id + '" class="chart-container"></div>';
         document.getElementById('panels-container').appendChild(wr);
 
         const c = LightweightCharts.createChart(document.getElementById('chart-' + id), {
             ...chartOpts,
-            timeScale: { visible: false }
+            // Keep same price scale setup as other panes (e.g. MACD) for consistent layout.
+            timeScale: {
+                ...chartOpts.timeScale,
+                visible: false,
+                rightOffset: chartOpts.timeScale?.rightOffset ?? 80
+            }
         });
         c.timeScale().subscribeVisibleLogicalRangeChange(() => syncAll(c));
         activePanes[id] = { chart: c, series: [] };
@@ -148,6 +156,116 @@ window.IndicatorRenderers = (function() {
         pane.series.push(h, l1, l2);
     }
 
+    function renderPhase(data, params, indicators, pane, LightweightCharts, addLog) {
+        if (!indicators || !indicators.phase || !Array.isArray(indicators.phase.phase)) {
+            if (addLog) addLog('Phase: indicators not available');
+            return;
+        }
+
+        // Match MACD pane layout: visible right price scale with fixed minimum width.
+        pane.chart.applyOptions({
+            rightPriceScale: {
+                visible: true,
+                borderVisible: true,
+                borderColor: '#363c4e',
+                minimumWidth: 80,
+                autoScale: true,
+                scaleMargins: { top: 0, bottom: 0 }
+            },
+            leftPriceScale: { visible: false }
+        });
+
+        if (addLog) addLog('Phase: rendering ' + indicators.phase.phase.length + ' data points');
+
+        const phaseData = [];
+        const PHASE_COLORS = {
+            'squeeze': '#00ffff',  // cyan — сжатие
+            'flat': '#aaaaaa',     // серый — боковик
+            'trend_up': '#00ee44', // ярко-зелёный — вверх
+            'trend_down': '#ff3333', // красный — вниз
+            'chaos': '#ffaa00'     // оранжевый — хаос
+        };
+
+        const confidence = indicators.phase.confidence;
+        const phaseScore = indicators.phase.phaseScore;
+
+        for (let i = 0; i < Math.min(indicators.phase.phase.length, data.length); i++) {
+            const phase = indicators.phase.phase[i];
+            const color = PHASE_COLORS[phase] || '#666';
+            // Приоритет: phaseScore (signed). Фолбэк на confidence для старых данных.
+            const conf = (confidence && confidence[i] != null ? confidence[i] : 0.5);
+            let fallbackSigned = 0;
+            if (phase === 'trend_up') fallbackSigned = 1 + conf;
+            else if (phase === 'trend_down') fallbackSigned = -(1 + conf);
+            else if (phase === 'squeeze') fallbackSigned = 0.5 + conf * 0.5;
+            else if (phase === 'flat') fallbackSigned = conf * 0.2;
+
+            const value = (phaseScore && Number.isFinite(phaseScore[i]))
+                ? phaseScore[i]
+                : fallbackSigned;
+
+            phaseData.push({
+                time: data[i].time,
+                value,
+                color
+            });
+        }
+
+        if (phaseData.length === 0) {
+            if (addLog) addLog('Phase: no data to render');
+            return;
+        }
+
+        if (addLog) addLog('Phase: created ' + phaseData.length + ' bars');
+
+        try {
+            const histogram = pane.chart.addSeries(LightweightCharts.HistogramSeries, {
+                color: '#ffaa00',
+                priceScaleId: 'right',
+                lastValueVisible: false,
+                priceLineVisible: false,
+                baseValue: { type: 'price', price: 0 }
+            });
+            histogram.setData(phaseData);
+            pane.series.push(histogram);
+
+            // Keep scale readable and ensure values are visible.
+            pane.chart.priceScale('right').applyOptions({
+                visible: true,
+                minimumWidth: 80,
+                autoScale: true,
+                scaleMargins: { top: 0, bottom: 0 }
+            });
+
+            // Anchor series makes scale always non-degenerate and labels stable.
+            const anchorTop = pane.chart.addSeries(LightweightCharts.LineSeries, {
+                color: 'rgba(255,255,255,0.01)',
+                lineWidth: 1,
+                lastValueVisible: false,
+                priceLineVisible: false,
+                priceScaleId: 'right'
+            });
+            const anchorBottom = pane.chart.addSeries(LightweightCharts.LineSeries, {
+                color: 'rgba(255,255,255,0.01)',
+                lineWidth: 1,
+                lastValueVisible: false,
+                priceLineVisible: false,
+                priceScaleId: 'right'
+            });
+            anchorTop.setData(data.map(d => ({ time: d.time, value: 2.2 })));
+            anchorBottom.setData(data.map(d => ({ time: d.time, value: -2.2 })));
+            pane.series.push(anchorTop, anchorBottom);
+
+            // Symmetric anchors keep 0 visually centered on autoscale.
+
+            pane.chart.timeScale().fitContent();
+
+            if (addLog) addLog('Phase: histogram added successfully');
+        } catch (e) {
+            if (addLog) addLog('Phase: ERROR rendering - ' + e.message);
+        }
+    }
+
     function toggleIndicator(ctx) {
         const {
             id,
@@ -164,7 +282,17 @@ window.IndicatorRenderers = (function() {
             LightweightCharts
         } = ctx;
 
+        const removeLegacyPhaseOverlay = () => {
+            const overlay = document.getElementById('phase-indicator-panel');
+            if (overlay) {
+                overlay.remove();
+            }
+        };
+
         if (!isChecked) {
+            if (id === 'Phase') {
+                removeLegacyPhaseOverlay();
+            }
             removeMainSeries(id, chartMain, mainSeriesRefs);
             removePane(id, activePanes);
             onResize();
@@ -198,6 +326,22 @@ window.IndicatorRenderers = (function() {
         }
         if (id === 'MACD') {
             renderMACD(data, params, pane, LightweightCharts);
+        }
+        if (id === 'Phase') {
+            removeLegacyPhaseOverlay();
+            addLog('Phase: calculating indicators...');
+            const indicators = window.StrategyCore && typeof window.StrategyCore.calculateIndicators === 'function'
+                ? window.StrategyCore.calculateIndicators(data, params, { forceAll: true, silent: true })
+                : null;
+
+            if (indicators) {
+                renderPhase(data, params, indicators, pane, LightweightCharts, addLog);
+                addLog('Phase: rendered in bottom pane');
+
+
+            } else {
+                addLog('Phase: failed to calculate indicators');
+            }
         }
 
         onResize();
