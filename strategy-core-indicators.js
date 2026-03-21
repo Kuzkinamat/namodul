@@ -17,8 +17,7 @@ window.StrategyCoreIndicators = (function() {
             stochastic: [],
             sma: [],
             bb: [],
-            atr: [],
-            phase: { phase: [], confidence: [] }
+            atr: []
         };
 
         if (!Array.isArray(data) || data.length === 0) {
@@ -26,12 +25,36 @@ window.StrategyCoreIndicators = (function() {
         }
 
         const requestedOnly = options && Array.isArray(options.only) ? options.only : null;
+        const shouldCalcSMA = (options && options.forceAll) ||
+            (requestedOnly ? requestedOnly.includes('sma') : resolvedParams.useSMA === true);
         const shouldCalcBB = (options && options.forceAll) ||
             (requestedOnly ? requestedOnly.includes('bb') : resolvedParams.useBB !== false);
         const shouldCalcMACD = (options && options.forceAll) ||
             (requestedOnly ? requestedOnly.includes('macd') : resolvedParams.useMACD === true);
-        const shouldCalcPhase = (options && options.forceAll) ||
-            (requestedOnly ? requestedOnly.includes('phase') : resolvedParams.usePhase !== false);
+        const shouldCalcStochastic = (options && options.forceAll) ||
+            (requestedOnly ? requestedOnly.includes('stochastic') : resolvedParams.useStochastic === true);
+        const shouldCalcATR = (options && options.forceAll) ||
+            (requestedOnly ? requestedOnly.includes('atr') : resolvedParams.useATR === true);
+
+        if (shouldCalcSMA) {
+            if (typeof window.calcSMA !== 'function') {
+                if (!(options && options.silent)) {
+                    context.log('Ошибка: функция calcSMA не найдена');
+                }
+                return null;
+            }
+
+            const smaPeriod = Math.max(2, Number(resolvedParams.smaPeriod || 20));
+            const sma = window.calcSMA(data, smaPeriod);
+            if (!Array.isArray(sma) || sma.length !== data.length) {
+                if (!(options && options.silent)) {
+                    const len = Array.isArray(sma) ? sma.length : 0;
+                    context.log(`Ошибка: длина SMA (${len}) не совпадает с данными (${data.length})`);
+                }
+                return null;
+            }
+            indicators.sma = sma;
+        }
 
         if (shouldCalcBB) {
             if (typeof window.calcBB !== 'function') {
@@ -79,34 +102,51 @@ window.StrategyCoreIndicators = (function() {
             indicators.macd = macd;
         }
 
-        // Расчет фазы рынка (требует BB и ATR)
-        if (shouldCalcPhase) {
+        if (shouldCalcStochastic) {
+            if (typeof window.calcStochastic !== 'function') {
+                if (!(options && options.silent)) {
+                    context.log('Ошибка: функция calcStochastic не найдена');
+                }
+                return null;
+            }
+
+            const stochastic = window.calcStochastic(
+                data,
+                Math.max(2, Number(resolvedParams.stochasticK || 14)),
+                Math.max(1, Number(resolvedParams.stochasticD || 3)),
+                Math.max(1, Number(resolvedParams.stochasticSlowing || 3))
+            );
+            if (!Array.isArray(stochastic) || stochastic.length !== data.length) {
+                if (!(options && options.silent)) {
+                    const len = Array.isArray(stochastic) ? stochastic.length : 0;
+                    context.log(`Ошибка: длина Stochastic (${len}) не совпадает с данными (${data.length})`);
+                }
+                return null;
+            }
+            indicators.stochastic = stochastic;
+        }
+
+        if (shouldCalcATR) {
             if (typeof window.calcATR !== 'function') {
                 if (!(options && options.silent)) {
                     context.log('Ошибка: функция calcATR не найдена');
                 }
-                // Не возвращаем null, просто пропускаем фазу
-            } else if (!indicators.bb || indicators.bb.length === 0) {
-                if (!(options && options.silent)) {
-                    context.log('Ошибка: Bollinger Bands нужны для расчета фазы');
-                }
-            } else {
-                if (!(options && options.silent)) {
-                    context.log('Расчет фазы рынка...');
-                }
-
-                const atr = window.calcATR(data, 14);
-                indicators.atr = atr;
-
-                if (typeof window.calculatePhaseIndicator !== 'function') {
-                    if (!(options && options.silent)) {
-                        context.log('Ошибка: функция calculatePhaseIndicator не найдена');
-                    }
-                } else {
-                    const phase = window.calculatePhaseIndicator(data, indicators.bb, atr, 20, 30);
-                    indicators.phase = phase;
-                }
+                return null;
             }
+
+            const atr = window.calcATR(
+                data,
+                Math.max(2, Number(resolvedParams.atrPeriod || 14)),
+                Math.max(1, Number(resolvedParams.atrSmoothPeriod || 8))
+            );
+            if (!Array.isArray(atr) || atr.length !== data.length) {
+                if (!(options && options.silent)) {
+                    const len = Array.isArray(atr) ? atr.length : 0;
+                    context.log(`Ошибка: длина ATR (${len}) не совпадает с данными (${data.length})`);
+                }
+                return null;
+            }
+            indicators.atr = atr;
         }
 
         return indicators;

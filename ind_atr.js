@@ -3,7 +3,7 @@
  * Измеряет волатильность цены
  */
 
-function calcATR(candles, period = 14) {
+function calcATR(candles, period = 120, smoothPeriod = 60) {
   if (!Array.isArray(candles) || candles.length === 0) {
     return [];
   }
@@ -49,7 +49,31 @@ function calcATR(candles, period = 14) {
     }
   }
 
-  return atr;
+  const sp = Math.max(1, Number(smoothPeriod) || 1);
+  if (sp <= 1) {
+    return atr;
+  }
+
+  // Доп. сглаживание ATR через EMA, чтобы убрать резкие всплески на графике.
+  const k = 2 / (sp + 1);
+  const smoothed = new Array(atr.length).fill(null);
+  let prev = null;
+
+  for (let i = 0; i < atr.length; i++) {
+    const v = atr[i];
+    if (!Number.isFinite(v)) {
+      continue;
+    }
+
+    if (!Number.isFinite(prev)) {
+      prev = v;
+    } else {
+      prev = (v - prev) * k + prev;
+    }
+    smoothed[i] = prev;
+  }
+
+  return smoothed;
 }
 
 /**

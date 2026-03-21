@@ -1,4 +1,4 @@
-// ind_renderers.js
+// ind_renderer.js
 // Rendering/toggle helpers for indicators.
 
 window.IndicatorRenderers = (function() {
@@ -29,7 +29,7 @@ window.IndicatorRenderers = (function() {
         const wr = document.createElement('div');
         wr.id = 'wrapper-' + id;
         wr.className = 'pane-wrapper sub-pane';
-        if (id === 'Phase') {
+        if (id === 'ATR') {
             wr.style.height = '65px';
         }
         wr.innerHTML = '<div class="v-line"></div><div id="chart-' + id + '" class="chart-container"></div>';
@@ -58,7 +58,7 @@ window.IndicatorRenderers = (function() {
             lastValueVisible: false,
             priceLineVisible: false
         });
-        const sma = window.calcSMA(data, params.smaPeriod || 20);
+        const sma = window.calcSMA(data, params.smaPeriod);
         s.setData(sma.map(point => toLinePoint(point.time, point.value)));
         mainSeriesRefs.SMA.push(s);
     }
@@ -66,7 +66,7 @@ window.IndicatorRenderers = (function() {
     function renderBB(data, params, chartMain, mainSeriesRefs, LightweightCharts) {
         removeMainSeries('BB', chartMain, mainSeriesRefs);
         mainSeriesRefs.BB = [];
-        const bb = window.calcBB(data, params.bbPeriod || 20, params.bbStdDev || 2);
+        const bb = window.calcBB(data, params.bbPeriod, params.bbStdDev);
         [
             { k: 't', c: 'rgba(38,166,154,0.3)' },
             { k: 'm', c: 'rgba(33,150,243,0.5)' },
@@ -87,9 +87,9 @@ window.IndicatorRenderers = (function() {
     function renderStochastic(data, params, pane, LightweightCharts, addLog) {
         const stochasticData = window.calcStochastic(
             data,
-            params.stochasticK || 14,
-            params.stochasticD || 3,
-            params.stochasticSlowing || 3
+            params.stochasticK,
+            params.stochasticD,
+            params.stochasticSlowing
         );
 
         addLog('Stochastic data length: ' + stochasticData.length);
@@ -145,7 +145,7 @@ window.IndicatorRenderers = (function() {
             priceLineVisible: false
         });
 
-        const macdData = window.calcMACD(data, params.macdFast || 12, params.macdSlow || 26, params.macdSignal || 9);
+        const macdData = window.calcMACD(data, params.macdFast, params.macdSlow, params.macdSignal);
         h.setData(macdData.map(item => ({
             time: item.time,
             value: item.histogram,
@@ -156,114 +156,67 @@ window.IndicatorRenderers = (function() {
         pane.series.push(h, l1, l2);
     }
 
-    function renderPhase(data, params, indicators, pane, LightweightCharts, addLog) {
-        if (!indicators || !indicators.phase || !Array.isArray(indicators.phase.phase)) {
-            if (addLog) addLog('Phase: indicators not available');
+    function renderATR(data, params, pane, LightweightCharts, addLog) {
+        if (typeof window.calcATR !== 'function') {
+            if (addLog) addLog('ATR: функция calcATR не найдена');
             return;
         }
 
-        // Match MACD pane layout: visible right price scale with fixed minimum width.
         pane.chart.applyOptions({
             rightPriceScale: {
                 visible: true,
                 borderVisible: true,
                 borderColor: '#363c4e',
+                ticksVisible: true,
                 minimumWidth: 80,
                 autoScale: true,
-                scaleMargins: { top: 0, bottom: 0 }
+                scaleMargins: { top: 0.1, bottom: 0.1 }
             },
-            leftPriceScale: { visible: false }
+            leftPriceScale: { visible: false },
+
         });
 
-        if (addLog) addLog('Phase: rendering ' + indicators.phase.phase.length + ' data points');
-
-        const phaseData = [];
-        const PHASE_COLORS = {
-            'squeeze': '#00ffff',  // cyan — сжатие
-            'flat': '#aaaaaa',     // серый — боковик
-            'trend_up': '#00ee44', // ярко-зелёный — вверх
-            'trend_down': '#ff3333', // красный — вниз
-            'chaos': '#ffaa00'     // оранжевый — хаос
-        };
-
-        const confidence = indicators.phase.confidence;
-        const phaseScore = indicators.phase.phaseScore;
-
-        for (let i = 0; i < Math.min(indicators.phase.phase.length, data.length); i++) {
-            const phase = indicators.phase.phase[i];
-            const color = PHASE_COLORS[phase] || '#666';
-            // Приоритет: phaseScore (signed). Фолбэк на confidence для старых данных.
-            const conf = (confidence && confidence[i] != null ? confidence[i] : 0.5);
-            let fallbackSigned = 0;
-            if (phase === 'trend_up') fallbackSigned = 1 + conf;
-            else if (phase === 'trend_down') fallbackSigned = -(1 + conf);
-            else if (phase === 'squeeze') fallbackSigned = 0.5 + conf * 0.5;
-            else if (phase === 'flat') fallbackSigned = conf * 0.2;
-
-            const value = (phaseScore && Number.isFinite(phaseScore[i]))
-                ? phaseScore[i]
-                : fallbackSigned;
-
-            phaseData.push({
-                time: data[i].time,
-                value,
-                color
-            });
-        }
-
-        if (phaseData.length === 0) {
-            if (addLog) addLog('Phase: no data to render');
+        const useAtrSettings = !!(params && params.useATR);
+        const atrData = useAtrSettings
+            ? window.calcATR(
+                data,
+                Math.max(2, Number(params.atrPeriod)),
+                Math.max(1, Number(params.atrSmoothPeriod))
+            )
+            : window.calcATR(data);
+        if (!Array.isArray(atrData) || atrData.length !== data.length) {
+            if (addLog) addLog('ATR: некорректные данные индикатора');
             return;
         }
 
-        if (addLog) addLog('Phase: created ' + phaseData.length + ' bars');
+        // Всегда отображаем ATR в процентах: ATR / Close * 100.
+        const atrView = atrData.map((v, i) => {
+            const close = data[i] && Number.isFinite(data[i].close) ? data[i].close : null;
+            return Number.isFinite(v) && Number.isFinite(close) && close > 0 ? (v / close) * 100 : null;
+        });
 
-        try {
-            const histogram = pane.chart.addSeries(LightweightCharts.HistogramSeries, {
-                color: '#ffaa00',
-                priceScaleId: 'right',
-                lastValueVisible: false,
-                priceLineVisible: false,
-                baseValue: { type: 'price', price: 0 }
-            });
-            histogram.setData(phaseData);
-            pane.series.push(histogram);
+        const finiteAtr = atrView.filter(v => Number.isFinite(v));
+        const maxAtr = finiteAtr.length ? Math.max(...finiteAtr) : 0;
+        let precision = 2;
+        if (maxAtr < 0.001) precision = 4;
+        else if (maxAtr < 0.01) precision = 3;
+        else if (maxAtr < 0.1) precision = 3;
+        const minMove = Math.pow(10, -precision);
 
-            // Keep scale readable and ensure values are visible.
-            pane.chart.priceScale('right').applyOptions({
-                visible: true,
-                minimumWidth: 80,
-                autoScale: true,
-                scaleMargins: { top: 0, bottom: 0 }
-            });
-
-            // Anchor series makes scale always non-degenerate and labels stable.
-            const anchorTop = pane.chart.addSeries(LightweightCharts.LineSeries, {
-                color: 'rgba(255,255,255,0.01)',
-                lineWidth: 1,
-                lastValueVisible: false,
-                priceLineVisible: false,
-                priceScaleId: 'right'
-            });
-            const anchorBottom = pane.chart.addSeries(LightweightCharts.LineSeries, {
-                color: 'rgba(255,255,255,0.01)',
-                lineWidth: 1,
-                lastValueVisible: false,
-                priceLineVisible: false,
-                priceScaleId: 'right'
-            });
-            anchorTop.setData(data.map(d => ({ time: d.time, value: 2.2 })));
-            anchorBottom.setData(data.map(d => ({ time: d.time, value: -2.2 })));
-            pane.series.push(anchorTop, anchorBottom);
-
-            // Symmetric anchors keep 0 visually centered on autoscale.
-
-            pane.chart.timeScale().fitContent();
-
-            if (addLog) addLog('Phase: histogram added successfully');
-        } catch (e) {
-            if (addLog) addLog('Phase: ERROR rendering - ' + e.message);
-        }
+        // ATR рендерим как линию в отдельной панели, аналогично осцилляторам.
+        const line = pane.chart.addSeries(LightweightCharts.LineSeries, {
+            color: '#8ec5ff',
+            lineWidth: 2,
+            lastValueVisible: false,
+            priceLineVisible: false,
+            priceFormat: {
+                type: 'price',
+                precision,
+                minMove
+            }
+        });
+        line.setData(data.map((c, i) => ({ time: c.time, value: atrView[i] })));
+        pane.series.push(line);
     }
 
     function toggleIndicator(ctx) {
@@ -282,17 +235,7 @@ window.IndicatorRenderers = (function() {
             LightweightCharts
         } = ctx;
 
-        const removeLegacyPhaseOverlay = () => {
-            const overlay = document.getElementById('phase-indicator-panel');
-            if (overlay) {
-                overlay.remove();
-            }
-        };
-
         if (!isChecked) {
-            if (id === 'Phase') {
-                removeLegacyPhaseOverlay();
-            }
             removeMainSeries(id, chartMain, mainSeriesRefs);
             removePane(id, activePanes);
             onResize();
@@ -327,23 +270,9 @@ window.IndicatorRenderers = (function() {
         if (id === 'MACD') {
             renderMACD(data, params, pane, LightweightCharts);
         }
-        if (id === 'Phase') {
-            removeLegacyPhaseOverlay();
-            addLog('Phase: calculating indicators...');
-            const indicators = window.StrategyCore && typeof window.StrategyCore.calculateIndicators === 'function'
-                ? window.StrategyCore.calculateIndicators(data, params, { forceAll: true, silent: true })
-                : null;
-
-            if (indicators) {
-                renderPhase(data, params, indicators, pane, LightweightCharts, addLog);
-                addLog('Phase: rendered in bottom pane');
-
-
-            } else {
-                addLog('Phase: failed to calculate indicators');
-            }
+        if (id === 'ATR') {
+            renderATR(data, params, pane, LightweightCharts, addLog);
         }
-
         onResize();
         syncAll(chartMain);
         return true;

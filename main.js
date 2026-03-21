@@ -90,78 +90,6 @@ window.onresize = () => {
     });
 };
 
-// Рисуем фазы как полосы
-let phaseRectanglesSeries = null;
-let lastPhaseRenderTime = {};
-
-function renderPhaseRectangles() {
-    if (!window.data || !window.data.length) return;
-
-    try {
-        const coreDefaults = window.StrategyCore && typeof window.StrategyCore.getDefaultParams === 'function'
-            ? window.StrategyCore.getDefaultParams()
-            : {};
-        const params = { ...coreDefaults, ...(window.Strategy?.params || {}) };
-        const indicators = window.StrategyCore && typeof window.StrategyCore.calculateIndicators === 'function'
-            ? window.StrategyCore.calculateIndicators(window.data, params, { forceAll: true, silent: true })
-            : null;
-
-        if (!indicators || !indicators.phase || !Array.isArray(indicators.phase.phase)) return;
-
-        const PHASE_COLORS = {
-            'squeeze': '#0088ff88',
-            'flat': '#00ff0044',
-            'trend_up': '#00ff0044',
-            'trend_down': '#ff444444',
-            'chaos': '#ffaa0044'
-        };
-
-        const shapes = [];
-        let startTime = null;
-        let currentPhase = null;
-
-        for (let i = 0; i < Math.min(indicators.phase.phase.length, window.data.length); i++) {
-            const phase = indicators.phase.phase[i];
-
-            if (phase !== currentPhase) {
-                if (currentPhase && startTime !== null) {
-                    // закончилась текущая фаза, добавим прямоугольник
-                    shapes.push({
-                        time: window.data[startTime].time,
-                        shape: [{
-                            type: 'background',
-                            timeRange: [window.data[startTime].time, window.data[i === 0 ? 0 : i - 1].time],
-                            color: PHASE_COLORS[currentPhase] || '#ffffff11'
-                        }]
-                    });
-                }
-                startTime = i;
-                currentPhase = phase;
-            }
-        }
-
-        // После цикла добавим последнюю фазу
-        if (currentPhase && startTime !== null) {
-            shapes.push({
-                time: window.data[startTime].time,
-                shape: [{
-                    type: 'background',
-                    timeRange: [window.data[startTime].time, window.data[window.data.length - 1].time],
-                    color: PHASE_COLORS[currentPhase] || '#ffffff11'
-                }]
-            });
-        }
-
-        // Lightweight Charts имеет встроенный способ для drawing shapes через логику
-        // Но это сложнее, чем просто увидеть фазы при наведении
-    } catch (e) {
-        // silently fail, don't spam logs
-    }
-}
-
-// Активируем рисование фаз при первой загрузке (опционально)
-// renderPhaseRectangles();
-
 let hasAutoStartedStrategyOnFirstOpen = false;
 
 async function autoStartStrategyAndBalanceOnFirstOpen() {
@@ -177,6 +105,33 @@ async function autoStartStrategyAndBalanceOnFirstOpen() {
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
         if (window.Strategy && typeof window.Strategy.testStrategy === 'function') {
             hasAutoStartedStrategyOnFirstOpen = true;
+
+            const ensureIndicatorEnabled = (id) => {
+                const cb = document.querySelector(`#indicator-menu input[data-id="${id}"]`);
+                if (!cb) return;
+                if (!cb.checked) {
+                    cb.checked = true;
+                }
+                if (typeof window.toggleIndicator === 'function') {
+                    window.toggleIndicator(id, true);
+                }
+            };
+
+            const ensureIndicatorDisabled = (id) => {
+                const cb = document.querySelector(`#indicator-menu input[data-id="${id}"]`);
+                if (!cb) return;
+                if (cb.checked) {
+                    cb.checked = false;
+                }
+                if (typeof window.toggleIndicator === 'function') {
+                    window.toggleIndicator(id, false);
+                }
+            };
+
+            ensureIndicatorEnabled('BB');
+            ensureIndicatorEnabled('Stochastic');
+            ensureIndicatorDisabled('ATR');
+
             window.Strategy.testStrategy();
 
             const balanceCheckbox = document.querySelector('#indicator-menu input[data-id="Balance"]');
@@ -525,7 +480,6 @@ window.toggleBalance = function(isChecked) {
             document.getElementById('wrapper-Balance')?.remove();
             delete activePanes.Balance;
             window.onresize();
-            addLog('График баланса скрыт');
         }
         return;
     }
@@ -651,7 +605,7 @@ window.onresize();
         // Set pair
         await window.setPair(pair);
 
-        addLog('Автозапуск стратегии отключен. Запуск доступен вручную.');
+        scheduleAutoStartStrategyAndBalanceOnFirstOpen();
         
         addLog(`Auto-loaded ${pair} (5m) from local data, range 1M.`);
     } else {

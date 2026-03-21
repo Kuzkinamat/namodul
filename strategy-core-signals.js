@@ -82,30 +82,13 @@ window.StrategyCoreSignals = (function() {
                 continue;
             }
 
-            // Пропустить свечу, если со времени последнего сигнала ещё не истёк expirationMinutes
-            if (signals.length > 0) {
-                const lastSignalTime = signals[signals.length - 1].time;
-                if (data[i].time - lastSignalTime < expirationSeconds) {
-                    continue;
-                }
-            }
 
             const localTradeHistory = buildClosedTradeHistory(data, signals, i, expirationSeconds, timeIndexMap);
             const mergedTradeHistory = (tradeHistory || []).concat(localTradeHistory);
             const context = contextModule.createConditionContext(i, data, resolvedIndicators, mergedTradeHistory);
             const { buy, sell } = contextModule.evaluateRules(resolvedParams.rules, context);
-            
-            // Проверка фильтра по фазе рынка
-            let passedPhaseFilter = true;
-            if (resolvedParams.phaseFilter && resolvedParams.phaseFilter !== 'none' && 
-                resolvedIndicators.phase && Array.isArray(resolvedIndicators.phase.phase)) {
-                const currentPhase = resolvedIndicators.phase.phase[i];
-                if (typeof window.shouldTradeInPhase === 'function') {
-                    passedPhaseFilter = window.shouldTradeInPhase(currentPhase, resolvedParams.phaseFilter);
-                }
-            }
-            
-            if (buy >= 1 && passedPhaseFilter) {
+
+            if (buy >= 1) {
                 signals.push({
                     time: data[i].time,
                     type: 'buy',
@@ -113,7 +96,7 @@ window.StrategyCoreSignals = (function() {
                     buyStrength: buy,
                     sellStrength: 0
                 });
-            } else if (sell >= 1 && passedPhaseFilter) {
+            } else if (sell >= 1) {
                 signals.push({
                     time: data[i].time,
                     type: 'sell',

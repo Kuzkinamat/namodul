@@ -2,7 +2,7 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <title>namoduL 0.1.9</title>
+    <title>namoduL 0.2.0</title>
     <meta charset="UTF-8">
     <link rel="stylesheet" href="style.css">
 
@@ -45,9 +45,9 @@
             <div class="dropdown" onclick="event.stopPropagation()">
                 <label class="ind-row"><input type="checkbox" data-id="SMA" onchange="toggleIndicator('SMA', this.checked)">SMA</label>
                 <label class="ind-row"><input type="checkbox" data-id="BB" onchange="toggleIndicator('BB', this.checked)">Bollinger Bands</label>
-                <label class="ind-row"><input type="checkbox" data-id="Phase" onchange="toggleIndicator('Phase', this.checked)">Market Phase</label>
                 <hr class="menu-divider">
                 <label class="ind-row"><input type="checkbox" data-id="MACD" onchange="toggleIndicator('MACD', this.checked)">MACD</label>
+                <label class="ind-row"><input type="checkbox" data-id="ATR" onchange="toggleIndicator('ATR', this.checked)">ATR</label>
                 <label class="ind-row"><input type="checkbox" data-id="Stochastic" onchange="toggleIndicator('Stochastic', this.checked)">Stochastic</label>
                 <hr class="menu-divider">
                 <label class="ind-row"><input type="checkbox" data-id="Balance" onchange="toggleBalance(this.checked)">Balance</label>
@@ -94,8 +94,7 @@
     <script src="./ind_macd.js"></script>
     <script src="./ind_stochastic.js"></script>
     <script src="./ind_atr.js"></script>
-    <script src="./ind_phase.js"></script>
-    <script src="./ind_renderers.js"></script>
+    <script src="./ind_renderer.js"></script>
     <script src="./prov-twelvedata.js"></script>
     <script src="./prov-local.js?v=20260320b"></script>
     <script src="./main.js"></script>

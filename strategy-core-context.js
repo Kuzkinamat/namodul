@@ -62,24 +62,6 @@ window.StrategyCoreContext = (function() {
             return name === 'bb' ? { upper: null, middle: null, lower: null } : null;
         }
 
-        function phase(lag = 0) {
-            const idx = i + lag;
-            const phaseSeries = indicators.phase;
-            if (!phaseSeries || idx < 0) {
-                return { name: 'flat', confidence: 0, score: 0 };
-            }
-
-            const names = Array.isArray(phaseSeries.phase) ? phaseSeries.phase : [];
-            const confs = Array.isArray(phaseSeries.confidence) ? phaseSeries.confidence : [];
-            const scores = Array.isArray(phaseSeries.phaseScore) ? phaseSeries.phaseScore : [];
-
-            const name = names[idx] || 'flat';
-            const confidence = Number.isFinite(confs[idx]) ? confs[idx] : 0;
-            const score = Number.isFinite(scores[idx]) ? scores[idx] : 0;
-
-            return { name, confidence, score };
-        }
-
         function bal(lag) {
             const arr = window.lastBalance;
             if (!arr) return null;
@@ -109,8 +91,37 @@ window.StrategyCoreContext = (function() {
             return dt > 0 && dt <= windowSeconds;
         }
 
-        const bbObj = indicators.bb && indicators.bb[i] ? indicators.bb[i] : { upper: null, middle: null, lower: null };
-        const candle = data[i] || { close: null, open: null, high: null, low: null };
+        function lossCountWithinPeriods(periods = 60) {
+            const history = tradeHistory || [];
+            const currentCandle = data[i];
+            if (!history.length || !currentCandle || !Number.isFinite(currentCandle.time)) {
+                return 0;
+            }
+
+            const windowPeriods = Math.max(1, Number(periods) || 1);
+            const fromIndex = Math.max(0, i - windowPeriods + 1);
+            const fromTime = data[fromIndex] && Number.isFinite(data[fromIndex].time)
+                ? data[fromIndex].time
+                : currentCandle.time;
+            let count = 0;
+
+            for (let idx = history.length - 1; idx >= 0; idx--) {
+                const trade = history[idx];
+                if (!trade || trade.result !== 'loss' || !Number.isFinite(trade.closeTime)) {
+                    continue;
+                }
+
+                if (trade.closeTime >= currentCandle.time) {
+                    continue;
+                }
+                if (trade.closeTime < fromTime) {
+                    break;
+                }
+                count += 1;
+            }
+
+            return count;
+        }
 
         return {
             i,
@@ -119,9 +130,9 @@ window.StrategyCoreContext = (function() {
             tradeHistory: tradeHistory || [],
             c,
             ind,
-            phase,
             bal,
             lastLossWithinTf,
+            lossCountWithinPeriods,
 
             indicator: function(name, lag = 0) {
                 const idx = i - lag;
@@ -179,14 +190,14 @@ window.StrategyCoreContext = (function() {
             const safeLastLossWithinTf = typeof context.lastLossWithinTf === 'function'
                 ? context.lastLossWithinTf
                 : function() { return false; };
-            const safePhase = typeof context.phase === 'function'
-                ? context.phase
-                : function() { return { name: 'flat', confidence: 0, score: 0 }; };
+            const safeLossCountWithinPeriods = typeof context.lossCountWithinPeriods === 'function'
+                ? context.lossCountWithinPeriods
+                : function() { return 0; };
 
-            const fn = new Function('c', 'ind', 'phase', 'bal', 'dealStats', 'lastLossWithinTf',
+            const fn = new Function('c', 'ind', 'bal', 'dealStats', 'lastLossWithinTf', 'lossCountWithinPeriods',
                 `let buy = 0, sell = 0;\n${rulesCode}\nreturn { buy, sell };`
             );
-            const result = fn(context.c, context.ind, safePhase, context.bal, safeDealStats, safeLastLossWithinTf);
+            const result = fn(context.c, context.ind, context.bal, safeDealStats, safeLastLossWithinTf, safeLossCountWithinPeriods);
             if (!result || typeof result !== 'object') {
                 return { buy: 0, sell: 0 };
             }

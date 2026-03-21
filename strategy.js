@@ -5,16 +5,7 @@
     'use strict';
 
     const FALLBACK_PARAMS = {
-        useBB: true,
-        useMACD: true,
-        bbPeriod: 20,
-        bbStdDev: 2,
-        macdFast: 12,
-        macdSlow: 26,
-        macdSignal: 9,
-        flatWidthLookback: 20,
-        squeezeWidthFactor: 0.75,
-        expirationMinutes: 5,
+        expirationMinutes: 15,
         winPayout: 0.8,
         baseStake: 1,
         rules: '',
@@ -32,11 +23,13 @@
     const INDICATOR_SETTING_KEYS = [
         'bbPeriod',
         'bbStdDev',
-        'macdFast',
-        'macdSlow',
-        'macdSignal',
-        'flatWidthLookback',
-        'squeezeWidthFactor'
+        'useATR',
+        'atrPeriod',
+        'atrSmoothPeriod',
+        'useStochastic',
+        'stochasticK',
+        'stochasticD',
+        'stochasticSlowing'
     ];
 
     function log(message) {
@@ -50,15 +43,29 @@
     }
 
     function createDefaultParams() {
+        if (window.StrategyParams && typeof window.StrategyParams.getDefaultParams === 'function') {
+            return window.StrategyParams.getDefaultParams();
+        }
+
         const core = getCore();
         if (core && typeof core.getDefaultParams === 'function') {
             return core.getDefaultParams();
         }
+
         return { ...FALLBACK_PARAMS };
     }
 
     function syncParams(params) {
-        return { ...createDefaultParams(), ...(params || {}) };
+        if (window.StrategyParams && typeof window.StrategyParams.normalizeParams === 'function') {
+            return window.StrategyParams.normalizeParams(params || {});
+        }
+
+        const core = getCore();
+        if (core && typeof core.normalizeParams === 'function') {
+            return core.normalizeParams(params || {});
+        }
+
+        return { ...FALLBACK_PARAMS, ...(params || {}) };
     }
 
     function applyWhitelistedSettings(target, source, keys) {
@@ -81,6 +88,116 @@
         params: createDefaultParams(),
         tradeHistory: [],
         expiration: 5,
+        markerBaseList: [],
+        markerSeries: null,
+        currentGraphicMarkerIndex: -1,
+        lastIndicators: null,
+        lastDataRef: null,
+        entryGraphicChart: null,
+        entryGraphicSeriesMid: null,
+        entryGraphicSeriesUpper: null,
+        entryGraphicSeriesLower: null,
+
+        setSeriesMarkers: function(series, markers) {
+            if (!series) {
+                return;
+            }
+
+            if (window.LightweightCharts && typeof window.LightweightCharts.createSeriesMarkers === 'function') {
+                if (series.markerPrimitive && typeof series.markerPrimitive.setMarkers === 'function') {
+                    series.markerPrimitive.setMarkers(markers);
+                } else {
+                    series.markerPrimitive = window.LightweightCharts.createSeriesMarkers(series, markers);
+                }
+            } else if (typeof series.setMarkers === 'function') {
+                series.setMarkers(markers);
+                log('Маркеры созданы через setMarkers');
+            } else {
+                log('Ошибка: не найден метод для отображения маркеров');
+            }
+        },
+
+        ensureEntryGraphicSeries: function(chart) {
+            if (!chart || !window.LightweightCharts || !window.LightweightCharts.LineSeries) {
+                return;
+            }
+
+            if (this.entryGraphicChart && this.entryGraphicChart !== chart) {
+                this.removeEntryGraphicSeries();
+            }
+
+            if (!this.entryGraphicSeriesMid) {
+                this.entryGraphicSeriesMid = chart.addSeries(window.LightweightCharts.LineSeries, {
+                    color: '#00bcd4',
+                    lineWidth: 1,
+                    lineStyle: 2,
+                    priceLineVisible: false,
+                    lastValueVisible: false,
+                    crosshairMarkerVisible: false
+                });
+            }
+            if (!this.entryGraphicSeriesUpper) {
+                this.entryGraphicSeriesUpper = chart.addSeries(window.LightweightCharts.LineSeries, {
+                    color: '#ff8a65',
+                    lineWidth: 2,
+                    priceLineVisible: false,
+                    lastValueVisible: false,
+                    crosshairMarkerVisible: false
+                });
+            }
+            if (!this.entryGraphicSeriesLower) {
+                this.entryGraphicSeriesLower = chart.addSeries(window.LightweightCharts.LineSeries, {
+                    color: '#ff8a65',
+                    lineWidth: 2,
+                    priceLineVisible: false,
+                    lastValueVisible: false,
+                    crosshairMarkerVisible: false
+                });
+            }
+
+            this.entryGraphicChart = chart;
+        },
+
+        removeEntryGraphicSeries: function() {
+            if (this.entryGraphicChart) {
+                if (this.entryGraphicSeriesMid) {
+                    this.entryGraphicChart.removeSeries(this.entryGraphicSeriesMid);
+                }
+                if (this.entryGraphicSeriesUpper) {
+                    this.entryGraphicChart.removeSeries(this.entryGraphicSeriesUpper);
+                }
+                if (this.entryGraphicSeriesLower) {
+                    this.entryGraphicChart.removeSeries(this.entryGraphicSeriesLower);
+                }
+            }
+
+            this.entryGraphicSeriesMid = null;
+            this.entryGraphicSeriesUpper = null;
+            this.entryGraphicSeriesLower = null;
+            this.entryGraphicChart = null;
+        },
+
+        clearEntryGraphicLines: function() {
+            if (this.entryGraphicSeriesMid) {
+                this.entryGraphicSeriesMid.setData([]);
+            }
+            if (this.entryGraphicSeriesUpper) {
+                this.entryGraphicSeriesUpper.setData([]);
+            }
+            if (this.entryGraphicSeriesLower) {
+                this.entryGraphicSeriesLower.setData([]);
+            }
+        },
+
+        showEntryGraphicForMarker: function(markerIndex) {
+            this.clearEntryGraphicLines();
+            this.currentGraphicMarkerIndex = -1;
+        },
+
+        clearEntryGraphic: function() {
+            this.clearEntryGraphicLines();
+            this.currentGraphicMarkerIndex = -1;
+        },
 
         createConditionContext: function(i, data, indicators, tradeHistory) {
             const core = getCore();
@@ -127,6 +244,9 @@
                     return [];
                 }
 
+                this.lastIndicators = indicators;
+                this.lastDataRef = data;
+
                 const signals = core.calculateSignals(data, this.params, indicators, this.tradeHistory);
                 return signals;
             } catch (error) {
@@ -155,6 +275,12 @@
                 window.MARKER_TIMESTAMPS.length = 0;
                 if (window.curM !== undefined) window.curM = 0;
             }
+
+            this.markerBaseList = [];
+            this.markerSeries = null;
+            this.currentGraphicMarkerIndex = -1;
+            this.clearEntryGraphicLines();
+            this.removeEntryGraphicSeries();
         },
 
         plotSignals: function(chart, series, signals) {
@@ -178,7 +304,8 @@
                 }
             }
 
-            const markers = signals.map(signal => {
+            const markers = [];
+            signals.forEach(signal => {
                 const strength = signal.type === 'buy' ? signal.buyStrength : signal.sellStrength;
                 const dealSize = baseStake * strength;
                 const dealSizeText = dealSize.toFixed(1);
@@ -197,32 +324,26 @@
                     markerColor = signal.type === 'buy' ? '#26a69a' : '#ef5350';
                 }
 
-                return {
+                markers.push({
                     time: signal.time,
                     position: signal.type === 'buy' ? 'belowBar' : 'aboveBar',
                     color: markerColor,
                     shape: signal.type === 'buy' ? 'arrowUp' : 'arrowDown',
                     text: dealSizeText
-                };
+                });
             });
+
+            this.markerBaseList = markers.slice();
+            this.markerSeries = series;
+            this.currentGraphicMarkerIndex = -1;
+            this.clearEntryGraphicLines();
 
             if (window.MARKER_TIMESTAMPS) {
                 window.MARKER_TIMESTAMPS.splice(0, window.MARKER_TIMESTAMPS.length, ...signals.map(signal => signal.time));
                 if (window.curM !== undefined) window.curM = 0;
             }
 
-            if (window.LightweightCharts && typeof window.LightweightCharts.createSeriesMarkers === 'function') {
-                if (series.markerPrimitive && typeof series.markerPrimitive.setMarkers === 'function') {
-                    series.markerPrimitive.setMarkers(markers);
-                } else {
-                    series.markerPrimitive = window.LightweightCharts.createSeriesMarkers(series, markers);
-                }
-            } else if (typeof series.setMarkers === 'function') {
-                series.setMarkers(markers);
-                log('Маркеры созданы через setMarkers');
-            } else {
-                log('Ошибка: не найден метод для отображения маркеров');
-            }
+            this.setSeriesMarkers(series, markers);
         },
 
         calculatePnL: function(data, signals, initialDeposit = 100, tradeAmount = 1, winCoefficient = null, options = {}) {
@@ -351,6 +472,12 @@
                 } else {
                     log('Предупреждение: функция applyAllSettings не найдена');
                 }
+
+                // Каждый запуск бэктеста должен начинаться с чистой истории сделок,
+                // иначе dealStats() в rules будет учитывать предыдущий прогон.
+                this.tradeHistory = [];
+                window.tradeHistory = this.tradeHistory;
+
                 const signals = this.calculateSignals(window.data);
 
                 window.lastSignals = signals;

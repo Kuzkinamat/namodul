@@ -148,7 +148,35 @@
 
         const fileName = getSelectedEditorFile();
         const sourceCache = getSourceCache();
+        const previousSource = typeof sourceCache[fileName] === 'string' ? sourceCache[fileName] : '';
+        const isSameSource = previousSource.trim() === code;
+
+        if (isSameSource) {
+            log('Код не изменён, повторный запуск без переинициализации');
+
+            if (window.Strategy && typeof window.Strategy.testStrategy === 'function') {
+                const chart = window.chartMain;
+                const ts = chart && typeof chart.timeScale === 'function' ? chart.timeScale() : null;
+                const previousRange = ts && typeof ts.getVisibleLogicalRange === 'function'
+                    ? ts.getVisibleLogicalRange()
+                    : null;
+
+                window.Strategy.testStrategy();
+
+                if (ts && previousRange && typeof ts.setVisibleLogicalRange === 'function') {
+                    ts.setVisibleLogicalRange(previousRange);
+                }
+            } else if (window.data && window.data.length > 0) {
+                refreshActiveIndicators();
+            }
+
+            return;
+        }
+
         const previousDefaults = window.StrategyParams;
+        const previousStrategyParams = window.Strategy && window.Strategy.params
+            ? { ...window.Strategy.params }
+            : null;
         const previousCache = { ...sourceCache };
 
         try {
@@ -162,6 +190,9 @@
 
                 if (window.Strategy && window.Strategy.updateFromCore) {
                     window.Strategy.updateFromCore();
+                    if (isSameSource && previousStrategyParams) {
+                        window.Strategy.params = { ...window.Strategy.params, ...previousStrategyParams };
+                    }
                 }
 
                 syncIndicatorSelectionFromStrategyParams();
