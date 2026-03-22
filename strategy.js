@@ -8,6 +8,9 @@
         expirationMinutes: 15,
         winPayout: 0.8,
         baseStake: 1,
+        useMartingale: false,
+        martingaleMultiplier: 2,
+        martingaleMaxSteps: 5,
         rules: '',
         filterTradingHours: false
     };
@@ -16,6 +19,9 @@
         'expirationMinutes',
         'winPayout',
         'baseStake',
+        'useMartingale',
+        'martingaleMultiplier',
+        'martingaleMaxSteps',
         'rules',
         'filterTradingHours'
     ];
@@ -233,7 +239,6 @@
                 }
 
                 this.params = syncParams(this.params);
-                log(`Данные для стратегии: ${data.length} свечей`);
 
                 if (window.debugLog) {
                     log('Отладочный лог включен для calculateSignals');
@@ -295,24 +300,26 @@
 
             const baseStake = this.params.baseStake || 1;
             
-            // Создаём map результатов сделок по времени и типу для быстрого поиска
+            // Создаём map результатов и ставки сделки по времени и типу для быстрого поиска
             const tradeResultMap = {};
+            const tradeStakeMap = {};
             if (this.tradeHistory && Array.isArray(this.tradeHistory)) {
                 for (const trade of this.tradeHistory) {
                     const key = `${trade.time}_${trade.type}`;
                     tradeResultMap[key] = trade.result; // 'win' или 'loss'
+                    tradeStakeMap[key] = Number(trade.stake) || 0;
                 }
             }
 
             const markers = [];
             signals.forEach(signal => {
                 const strength = signal.type === 'buy' ? signal.buyStrength : signal.sellStrength;
-                const dealSize = baseStake * strength;
-                const dealSizeText = dealSize.toFixed(1);
 
                 // Определяем цвет маркера по результату сделки
                 const tradeKey = `${signal.time}_${signal.type}`;
                 const tradeResult = tradeResultMap[tradeKey];
+                const dealSize = tradeStakeMap[tradeKey] || (baseStake * strength);
+                const dealSizeText = dealSize.toFixed(1);
                 
                 let markerColor;
                 if (tradeResult === 'win') {
@@ -374,6 +381,10 @@
 
             const expirationSeconds = this.getExpiration() * 60;
             const profitByCandleIndex = {};
+            const useMartingale = this.params.useMartingale === true;
+            const martingaleMultiplier = Math.max(1, Number(this.params.martingaleMultiplier ?? 2));
+            const martingaleMaxSteps = Math.max(0, Number(this.params.martingaleMaxSteps ?? 5));
+            let martingaleStep = 0;
 
             for (const signal of signals) {
                 const entryIndex = data.findIndex(candle => candle.time === signal.time);
@@ -407,7 +418,9 @@
                 }
 
                 const strength = signal.type === 'buy' ? signal.buyStrength : signal.sellStrength;
-                const stake = (this.params.baseStake || 1) * (strength ?? 1);
+                const baseStake = (this.params.baseStake || 1) * (strength ?? 1);
+                const martingaleFactor = useMartingale ? Math.pow(martingaleMultiplier, martingaleStep) : 1;
+                const stake = baseStake * martingaleFactor;
                 const profit = isWin ? stake * winCoefficient : -stake;
 
                 if (!profitByCandleIndex[closeIndex]) {
@@ -424,8 +437,38 @@
                     result: isWin ? 'win' : 'loss',
                     profit: profit,
                     stake,
+                    martingaleStep,
                     expiration: expirationSeconds / 60
                 });
+
+                if (useMartingale) {
+                    if (isWin) {
+                        martingaleStep = 0;
+                    } else {
+                        // stopLossCnt делает паузу (freeze) в мартине при лоссе
+                        const stopLossCnt = Math.max(0, Number(this.params.stopLossCnt ?? 4));
+                        const stopLossPeriod = Math.max(1, Number(this.params.stopLossPeriod ?? 60));
+                        
+                        const stopActive = stopLossCnt > 0 && this.tradeHistory.length > 0;
+                        if (stopActive) {
+                            // Считаем лоссы за последний период в барах (свечах)
+                            const windowStart = Math.max(0, closeIndex - stopLossPeriod);
+                            const recentLosses = this.tradeHistory.filter(t => {
+                                const closeIdx = data.findIndex(candle => candle.time === t.closeTime);
+                                return t.result === 'loss' && closeIdx >= windowStart && closeIdx <= closeIndex;
+                            }).length;
+                            
+                            // Если лоссов меньше stopLossCnt, увеличиваем шаг; иначе мартин замерзает
+                            if (recentLosses < stopLossCnt) {
+                                martingaleStep = Math.min(martingaleMaxSteps, martingaleStep + 1);
+                            }
+                            // Иначе шаг остаётся без изменений (freeze)
+                        } else {
+                            // stopLossCnt не активен, увеличиваем шаг как обычно
+                            martingaleStep = Math.min(martingaleMaxSteps, martingaleStep + 1);
+                        }
+                    }
+                }
             }
 
             for (let i = 0; i < data.length; i++) {

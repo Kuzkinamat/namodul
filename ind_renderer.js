@@ -92,20 +92,12 @@ window.IndicatorRenderers = (function() {
             params.stochasticSlowing
         );
 
-        addLog('Stochastic data length: ' + stochasticData.length);
-        for (let idx = 0; idx < Math.min(5, stochasticData.length); idx++) {
-            const d = stochasticData[idx];
-            addLog('Stochastic[' + idx + ']: time=' + new Date(d.time * 1000).toISOString() + ', k=' + d.k + ', d=' + d.d);
-        }
-
         const nonNullK = stochasticData.filter(d => d.k !== null).length;
         const nonNullD = stochasticData.filter(d => d.d !== null).length;
-        addLog('Non-null K: ' + nonNullK + ', D: ' + nonNullD);
+        
         if (nonNullK > 0) {
             const firstK = stochasticData.find(d => d.k !== null);
             const lastK = stochasticData.slice().reverse().find(d => d.k !== null);
-            addLog('First K time: ' + new Date(firstK.time * 1000).toISOString() + ', value: ' + firstK.k.toFixed(2));
-            addLog('Last K time: ' + new Date(lastK.time * 1000).toISOString() + ', value: ' + lastK.k.toFixed(2));
         }
 
         const kLine = pane.chart.addSeries(LightweightCharts.LineSeries, {

@@ -720,56 +720,8 @@ window.changeMarker = function(dir) {
         return;
     }
 
-    addLog(`Переход к маркеру ${curM + 1} из ${window.MARKER_TIMESTAMPS.length}`);
-    logMarkerDetails(curM, markerTime, markerDataIndex);
 };
 
-function logMarkerDetails(markerIdx, markerTime, dataIndex) {
-    const signal = window.lastSignals && window.lastSignals[markerIdx];
-    const candle  = data && data[dataIndex];
-    const fmt     = (v, d = 5) => (v === null || v === undefined || !Number.isFinite(v)) ? '—' : v.toFixed(d);
-    const fmtTime = (ts) => ts ? new Date(ts * 1000).toISOString().replace('T', ' ').slice(0, 19) : '—';
-
-    const lines = [];
-    lines.push(`── Маркер ${markerIdx + 1}: ${fmtTime(markerTime)} ──`);
-
-    if (signal) {
-        lines.push(`  Сигнал : ${signal.type.toUpperCase()}  цена=${fmt(signal.price)}`);
-    }
-
-    if (candle) {
-        lines.push(`  Свеча  : O=${fmt(candle.open)} H=${fmt(candle.high)} L=${fmt(candle.low)} C=${fmt(candle.close)}`);
-    }
-
-    // BB на этой свече
-    const params = (window.StrategyCore && typeof window.StrategyCore.getDefaultParams === 'function')
-        ? { ...window.StrategyCore.getDefaultParams(), ...(window.Strategy?.params || {}) }
-        : (window.Strategy?.params || {});
-
-    if (window.StrategyCore && typeof window.StrategyCore.calculateIndicators === 'function' && data) {
-        const indicators = window.StrategyCore.calculateIndicators(data, params, { silent: true, forceAll: true });
-        if (indicators) {
-            const bb = indicators.bb && indicators.bb[dataIndex];
-            if (bb && bb.upper !== null) {
-                const half  = bb.upper - bb.middle;
-                const distU = bb.upper - candle.close;
-                const distL = candle.close - bb.lower;
-                lines.push(`  BB     : upper=${fmt(bb.upper)} mid=${fmt(bb.middle)} lower=${fmt(bb.lower)}`);
-                lines.push(`  Зазор  : до upper=${fmt(distU)} (${fmt(half > 0 ? distU / half * 100 : 0, 1)}%)  до lower=${fmt(distL)} (${fmt(half > 0 ? distL / half * 100 : 0, 1)}%)`);
-            }
-        }
-    }
-
-    // Сделка из tradeHistory с этим временем
-    const trade = window.Strategy && window.Strategy.tradeHistory &&
-        window.Strategy.tradeHistory.find(t => t.time === markerTime);
-    if (trade) {
-        lines.push(`  Сделка : ${trade.result.toUpperCase()}  +/${fmt(trade.profit, 2)}  exp=${trade.expiration}мин`);
-        lines.push(`  Входная цена=${fmt(trade.price)}  закрытие=${fmt(trade.closePrice)}  @${fmtTime(trade.closeTime)}`);
-    }
-
-    lines.forEach(l => addLog(l));
-}
 // Переход к началу графика (сохраняет текущий масштаб)
 window.navigateToStart = function() {
     if (!data || data.length === 0) {

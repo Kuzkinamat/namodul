@@ -3,6 +3,7 @@
 
 const TWELVEDATA_API_KEY = 'aa6331f5e6cc4e3491b731e0dda2955f';
 const TWELVEDATA_API_URL = 'https://api.twelvedata.com';
+const MAX_LOADED_BARS = 5000;
 
 // Default forex pairs (only major pairs)
 const DEFAULT_PAIRS = [
@@ -100,7 +101,7 @@ window.TwelveDataProvider = {
             }
             
             const interval = window.DataUtils.mapTimeframeToInterval(timeframe);
-            const outputsize = window.DataUtils.calculateOutputSize(range, timeframe);
+            const outputsize = Math.min(window.DataUtils.calculateOutputSize(range, timeframe), MAX_LOADED_BARS);
             
             // Build API URL
             const url = `${this.baseUrl}/time_series?symbol=${encodeURIComponent(pair)}&interval=${interval}&apikey=${this.apiKey}&outputsize=${outputsize}&format=JSON`;

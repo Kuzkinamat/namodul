@@ -64,10 +64,6 @@ window.StrategyCoreIndicators = (function() {
                 return null;
             }
 
-            if (!(options && options.silent)) {
-                context.log('Расчет Bollinger Bands...');
-            }
-
             const bb = window.calcBB(data, resolvedParams.bbPeriod, resolvedParams.bbStdDev);
             if (!Array.isArray(bb) || bb.length !== data.length) {
                 if (!(options && options.silent)) {
